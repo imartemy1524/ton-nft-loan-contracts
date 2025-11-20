@@ -3,7 +3,7 @@ import "structs"
 
 
 @inline
-fun nftTransfer(nftAddress: address, newOwner: address, excessTo: address, forwardPayload: cell, forwardAmount: coins, mode: int = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS | SEND_MODE_DESTROY, value: int = 0) {
+fun nftTransfer(nftAddress: address, newOwner: address, excessTo: address, forwardPayload: cell, forwardAmount: coins, mode: int = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS, value: int = 0) {
     createMessage({
         bounce: false,
         value,
@@ -19,7 +19,7 @@ fun nftTransfer(nftAddress: address, newOwner: address, excessTo: address, forwa
 }
 
 @inline
-fun jettonTransfer(jettonAddress: address, to: address, amount: coins, excessTo: address, forwardPayload: cell, forwardAmount: coins = 1, mode: int = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS | SEND_MODE_DESTROY, value: int = 0) {
+fun jettonTransfer(jettonAddress: address, to: address, amount: coins, excessTo: address, forwardPayload: cell, forwardAmount: coins = 1, mode: int = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS, value: int = 0) {
     createMessage({
         bounce: false,
         value,
