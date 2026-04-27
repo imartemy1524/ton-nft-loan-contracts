@@ -95,7 +95,7 @@ export function cellToMainConfig(cell: Cell): MainConfig {
 export function giveMoneyBody(data: LoanParams): Cell {
     return beginCell().storeUint(Opcodes.OP_GIVE_MONEY, 32).store(
         storeLoanParams(data)
-    ).endCell()
+    ).storeAddress(null).endCell()
 }
 export function repayBody(forwardPayload: Cell, forwardAmount: bigint): Cell {
     return beginCell()

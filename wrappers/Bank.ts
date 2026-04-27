@@ -202,10 +202,10 @@ export class Bank implements Contract {
             Dictionary.Keys.Address(),
             {
                 parse(src: Slice): BankOffer {
-                    return bankOfferFromCell(src.asCell());
+                    return bankOfferFromCell(src.loadRef());
                 },
                 serialize(src: BankOffer, builder: Builder) {
-                    builder.storeSlice(bankOfferToCell(src).asSlice());
+                    builder.storeRef(bankOfferToCell(src));
                 },
             },
             offersCell,

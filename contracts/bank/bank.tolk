@@ -104,6 +104,7 @@ fun onInternalMessage(in: InMessage) {
                 storage.owner,
                 createEmptyCell(),
                 1,
+                SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE
             );
         }
 

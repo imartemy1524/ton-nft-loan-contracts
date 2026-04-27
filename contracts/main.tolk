@@ -60,11 +60,11 @@ fun parseTokenNotificationType(msg: TokenNotification, senderAddress: address, v
                 storage.ownerAddresses = addresses.toCell();
                 storage.save();
                 reserveToncoinsOnBalance(reserveAmount, 0);
-                jettonTransfer(senderAddress!, addresses.borrower, msg.amount, msg.from, loanStartedString());
+                jettonTransfer(senderAddress!, addresses.borrower, msg.amount, msg.from, loanStartedString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
             } catch (e) {
                 debug.print(e);
                 reserveToncoinsOnBalance(reserveAmount, 0);
-                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString());
+                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
             }
         }
         RepayLoan => {
@@ -79,16 +79,16 @@ fun parseTokenNotificationType(msg: TokenNotification, senderAddress: address, v
                 var addresses = lazy storage.ownerAddresses.load();
                 reserveToncoinsOnBalance(ton("0.001"), RESERVE_MODE_AT_MOST);
                 nftTransfer(storage.nftAddress, addresses.borrower, msg.from, ref.forwardPayload, ref.forwardAmount, SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_BOUNCE_ON_ACTION_FAIL, ton("0.04") + ref.forwardAmount);
-                jettonTransfer(storage.jettonAddress!, addresses.moneyGiver!, msg.amount, msg.from, loanRepayedString());
+                jettonTransfer(storage.jettonAddress!, addresses.moneyGiver!, msg.amount, msg.from, loanRepayedString(),  1, SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_BOUNCE_ON_ACTION_FAIL);
             } catch (e) {
                 debug.print(e);
                 reserveToncoinsOnBalance(reserveAmount, 0);
-                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString());
+                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
             }
         }
         else => {
             reserveToncoinsOnBalance(reserveAmount, 0);
-            jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownMessageString());
+            jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownMessageString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
         }
     }
 }

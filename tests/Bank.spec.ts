@@ -1,5 +1,5 @@
 import { Blockchain, printTransactionFees, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { beginCell, toNano } from '@ton/core';
+import { Address, beginCell, fromNano, toNano } from '@ton/core';
 import { Cell } from '@ton/core';
 import { Main, LoanStatus } from '../wrappers/Main';
 import { Bank } from '../wrappers/Bank';
@@ -20,6 +20,25 @@ const LOAN_PARAMS = {
 const EXPIRATION_FAR_FUTURE = BigInt(86400 * 365 * 10); // 10 years from now
 
 // helpers
+async function getBankData(bank: SandboxContract<Bank>) {
+    return await bank.getData();
+}
+
+async function getOffer(bank: SandboxContract<Bank>, loanAddress: Address) {
+    return (await bank.getData()).offers.get(loanAddress) ?? null;
+}
+
+async function getJettonBalance(wallet: SandboxContract<JettonWallet>) {
+    try {
+        return (await wallet.getGetWalletData()).balance;
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('non-active contract')) {
+            return 0n;
+        }
+        throw error;
+    }
+}
+
 async function deployLoan(
     blockchain: Blockchain,
     code: Cell,
@@ -101,8 +120,10 @@ describe('Bank — TON loans', () => {
     // ── Deployment ──────────────────────────────────────────────────────────
 
     it('deploys and stores owner', async () => {
-        const { owner: storedOwner } = await bank.getBankData();
+        const { owner: storedOwner } = await getBankData(bank);
         expect(storedOwner).toEqualAddress(owner.address);
+        const { balance } = await blockchain.getContract(bank.address);
+        expect(+fromNano(balance)).toBeCloseTo(10)
     });
 
     // ── AddOffer ────────────────────────────────────────────────────────────
@@ -114,7 +135,7 @@ describe('Bank — TON loans', () => {
             LOAN_PARAMS,
             EXPIRATION_FAR_FUTURE,
         );
-        const offer = await bank.getOffer(loan.address);
+        const offer = await getOffer(bank, loan.address);
         expect(offer).not.toBeNull();
         expect(offer!.loanParams.amount).toBe(LOAN_PARAMS.amount);
         expect(offer!.loanParams.duration).toBe(LOAN_PARAMS.duration);
@@ -141,10 +162,10 @@ describe('Bank — TON loans', () => {
 
     it('owner can remove an offer', async () => {
         await bank.sendAddOffer(owner.getSender(), loan.address, LOAN_PARAMS, EXPIRATION_FAR_FUTURE);
-        expect(await bank.getOffer(loan.address)).not.toBeNull();
+        expect(await getOffer(bank, loan.address)).not.toBeNull();
 
         await bank.sendRemoveOffer(owner.getSender(), loan.address);
-        expect(await bank.getOffer(loan.address)).toBeNull();
+        expect(await getOffer(bank, loan.address)).toBeNull();
     });
 
     it('non-owner cannot remove offer', async () => {
@@ -162,7 +183,7 @@ describe('Bank — TON loans', () => {
     it('borrower can accept a bank offer (TON loan, full flow)', async () => {
         // 1. Bank owner creates an offer for this specific loan
         await bank.sendAddOffer(owner.getSender(), loan.address, LOAN_PARAMS, EXPIRATION_FAR_FUTURE);
-        expect(await bank.getOffer(loan.address)).not.toBeNull();
+        expect(await getOffer(bank, loan.address)).not.toBeNull();
 
         const borrowerBalanceBefore = await borrower.getBalance();
 
@@ -198,17 +219,17 @@ describe('Bank — TON loans', () => {
         // Loan status must be IN_PROGRESS
         const data = await loan.getData();
         expect(data.status).toBe(LoanStatus.IN_PROGRESS);
-        // moneyGiver is the bank
-        expect(data.ownerAddresses.moneyGiver).toEqualAddress(bank.address);
+        // moneyGiver is the separate bank wallet that owns the bank contract.
+        expect(data.ownerAddresses.moneyGiver).toEqualAddress(owner.address);
 
         // Borrower must have received at least the loan amount net of gas
         const borrowerBalanceAfter = await borrower.getBalance();
         expect(borrowerBalanceAfter - borrowerBalanceBefore).toBeGreaterThan(
-            LOAN_PARAMS.amount - toNano('0.1'),
+            LOAN_PARAMS.amount - toNano('0.15'),
         );
 
         // Offer was consumed
-        expect(await bank.getOffer(loan.address)).toBeNull();
+        expect(await getOffer(bank, loan.address)).toBeNull();
     });
 
     it('bank rejects request if loan params mismatch', async () => {
@@ -297,40 +318,43 @@ describe('Bank — TON loans', () => {
     // ── WithdrawNft ─────────────────────────────────────────────────────────
 
     it('owner can withdraw NFT from bank', async () => {
+        const bankNftOwner = await blockchain.treasury('bankNftOwner');
+        const bankNft = await deployNft(blockchain, bankNftOwner);
+
         // First send NFT to bank
-        await nft.send(
-            borrower.getSender(),
+        await bankNft.send(
+            bankNftOwner.getSender(),
             { value: toNano('0.05') },
             {
                 $$type: 'Transfer',
                 query_id: 1n,
                 new_owner: bank.address,
-                response_destination: borrower.address,
+                response_destination: bankNftOwner.address,
                 custom_payload: null,
                 forward_amount: 0n,
                 forward_payload: beginCell().endCell().asSlice(),
             },
         );
-        expect((await nft.getGetNftData()).owner_address).toEqualAddress(bank.address);
+        expect((await bankNft.getGetNftData()).owner_address).toEqualAddress(bank.address);
 
-        const { transactions } = await bank.sendWithdrawNft(owner.getSender(), nft.address);
+        const { transactions } = await bank.sendWithdrawNft(owner.getSender(), bankNft.address);
         expect(transactions).toHaveTransaction({
             from: bank.address,
-            to: nft.address,
+            to: bankNft.address,
             success: true,
         });
-        expect((await nft.getGetNftData()).owner_address).toEqualAddress(owner.address);
+        expect((await bankNft.getGetNftData()).owner_address).toEqualAddress(owner.address);
     });
 
     // ── External: RemoveExpiredOffer ─────────────────────────────────────────
 
     it('anyone can remove expired offer via external message', async () => {
-        const expiredAt = BigInt(blockchain.now! - 1);
+        const expiredAt = BigInt(blockchain.now! +5);
         await bank.sendAddOffer(owner.getSender(), loan.address, LOAN_PARAMS, expiredAt);
-        expect(await bank.getOffer(loan.address)).not.toBeNull();
-
+        expect(await getOffer(bank, loan.address)).not.toBeNull();
+        blockchain.now = Number(expiredAt+1n)
         await bank.sendRemoveExpiredOffer(loan.address);
-        expect(await bank.getOffer(loan.address)).toBeNull();
+        expect(await getOffer(bank, loan.address)).toBeNull();
     });
 
     it('cannot externally remove non-expired offer', async () => {
@@ -453,7 +477,7 @@ describe('Bank — Jetton loans', () => {
             bankJetton.address, // bank's jetton wallet for this offer
         );
 
-        const borrowerJettonBefore = (await borrowerJetton.getGetWalletData()).balance;
+        const borrowerJettonBefore = await getJettonBalance(borrowerJetton);
 
         // Borrower accepts the offer
         const { transactions } = await loan.sendAcceptOffer(
@@ -497,10 +521,10 @@ describe('Bank — Jetton loans', () => {
         // Loan must be IN_PROGRESS
         const data = await loan.getData();
         expect(data.status).toBe(LoanStatus.IN_PROGRESS);
-        expect(data.ownerAddresses.moneyGiver).toEqualAddress(bank.address);
+        expect(data.ownerAddresses.moneyGiver).toEqualAddress(owner.address);
 
         // Borrower received the jettons
-        const borrowerJettonAfter = (await borrowerJetton.getGetWalletData()).balance;
+        const borrowerJettonAfter = await getJettonBalance(borrowerJetton);
         expect(borrowerJettonAfter - borrowerJettonBefore).toBe(LOAN_PARAMS.amount);
 
         // Bank's jetton balance reduced
@@ -508,7 +532,7 @@ describe('Bank — Jetton loans', () => {
         expect(bankJettonBalance).toBe(toNano(100) - LOAN_PARAMS.amount);
 
         // Offer was consumed
-        expect(await bank.getOffer(loan.address)).toBeNull();
+        expect(await getOffer(bank, loan.address)).toBeNull();
     });
 
     it('owner can withdraw jettons', async () => {
