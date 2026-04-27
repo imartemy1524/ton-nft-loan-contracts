@@ -66,6 +66,7 @@ struct (0x05138d91) OwnershipAssigned {
 }
 
 
+
 const reserveAmount: coins = ton("0.01");
 const minCoinsWithdrawNFT : coins = ton("0.05");
 const networkComissionTon : coins = ton("0.05");

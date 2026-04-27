@@ -19,7 +19,7 @@ export enum LoanStatus {
     CANCELLED = 5,
 }
 type Decimal = { nominator: number; denominator: number };
-type LoanParams = {
+export type LoanParams = {
     duration: number; // duration of the loan in seconds
     interestPerDay: Decimal;
     amount: bigint;
@@ -111,6 +111,7 @@ export const Opcodes = {
     OP_GIVE_MONEY: 0x94f712fe,
     OP_CHANGE_LOAN_PARAMS: 0x94f712fd,
     OP_CANCEL_BEFORE_START: 0x94f712ff,
+    OP_ACCEPT_OFFER: 0x94f712f0,
 };
 
 function loadOwnerAddresses(ownerAddressesCell: Cell): OwnerAddresses {
@@ -215,6 +216,23 @@ export class Main implements Contract {
     //             .endCell(),
     //     });
     // }
+    async sendAcceptOffer(
+        provider: ContractProvider,
+        via: Sender,
+        bankAddress: Address,
+        loanParams: LoanParams,
+    ) {
+        await provider.internal(via, {
+            value: toNano('0.15'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(Opcodes.OP_ACCEPT_OFFER, 32)
+                .storeAddress(bankAddress)
+                .store(storeLoanParams(loanParams))
+                .endCell(),
+        });
+    }
+
     async sendWithdrawNftNotRepaid(
         provider: ContractProvider,
         via: Sender,

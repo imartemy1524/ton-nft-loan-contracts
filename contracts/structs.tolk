@@ -19,6 +19,11 @@ enum Status: uint3 {
     WAITING_FOR_FUNDS = 4,
     CANCELLED = 5,
 }
+struct (0x94f712fe) GiveFunds {
+    loanParams: LoanParams;
+    owner: address?;
+}
+
 struct OwnerAddresses {
     moneyGiver: address?;       // owner of the contract (who gived the money)
     borrower: address;      // owner of the NFT (who took the loan)

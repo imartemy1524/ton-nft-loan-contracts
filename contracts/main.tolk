@@ -21,16 +21,24 @@ struct (0x94f712fb) LoanNotRepayedWithdrawNFT {
 struct (0x94f712fd) ChangeLoanParams {
     newLoanParams: LoanParams;
 }
-struct (0x94f712fe) GiveFunds {
-    loanParams: LoanParams;
-}
 struct (0x94f712ff) CancelLoadBeforeStart {
 
 }
 
+// Borrower accepts a bank's lending offer; the loan forwards a funding request to the bank.
+// The bank verifies its offer and sends GiveFunds back with the actual funds.
+struct (0x94f712f0) AcceptOffer {
+    bankAddress: address;
+    loanParams: LoanParams; // must match the bank's stored offer exactly
+}
+
+// Mirrors bank/structs.tolk BankRequestFunds (opcode 0xBA000006)
+struct (0xBA000006) BankRequestFunds {
+    loanParams: LoanParams;
+}
 
 // this allows processing them with pattern matching
-type AllowedMessage = CreateLoan | RepayLoan | LoanNotRepayedWithdrawNFT | TokenNotification | ChangeLoanParams | GiveFunds | CancelLoadBeforeStart;
+type AllowedMessage = CreateLoan | RepayLoan | LoanNotRepayedWithdrawNFT | TokenNotification | ChangeLoanParams | GiveFunds | CancelLoadBeforeStart | AcceptOffer;
 type TokenNotificationType = GiveFunds | RepayLoan;
 // the main entrypoint: called when a contract receives an message from other contracts
 @inline
@@ -48,7 +56,7 @@ fun parseTokenNotificationType(msg: TokenNotification, senderAddress: address, v
                 storage.status = Status.IN_PROGRESS;
                 storage.startedAt = blockchain.now();
                 var addresses = lazy storage.ownerAddresses.load();
-                addresses.moneyGiver = msg.from;
+                addresses.moneyGiver = ref.owner != null ? ref.owner : msg.from;
                 storage.ownerAddresses = addresses.toCell();
                 storage.save();
                 reserveToncoinsOnBalance(reserveAmount, 0);
@@ -142,7 +150,7 @@ fun onInternalMessage(in: InMessage) {
             storage.status = Status.IN_PROGRESS;
             storage.startedAt = blockchain.now();
             var addresses = lazy storage.ownerAddresses.load();
-            addresses.moneyGiver = in.senderAddress;
+            addresses.moneyGiver = msg.owner != null ? msg.owner : in.senderAddress;
             storage.ownerAddresses = addresses.toCell();
             storage.save();
             reserveToncoinsOnBalance(reserveAmount, 0);
@@ -188,6 +196,32 @@ fun onInternalMessage(in: InMessage) {
             nftTransfer(storage.nftAddress, addresses.moneyGiver!, in.senderAddress, msg.forwardPayload, msg.forwardAmount);
         }
 
+        // Borrower accepts a bank offer: update loan params and forward funding request
+        AcceptOffer => {
+            var storage = lazy Storage.load();
+            assert (storage.status == Status.WAITING_FOR_FUNDS) throw invalidStatusError;
+            var addresses = lazy storage.ownerAddresses.load();
+            // Only the borrower (NFT owner) may accept an offer on their loan
+            assert (in.senderAddress == addresses.borrower) throw 5;
+            // Require enough TON to cover gas for this contract + the bank call
+            assert (in.valueCoins >= networkComissionTon * 2) throw notEnoughTonError;
+
+            // Adopt the bank's loan params; the bank will reject if they don't match its offer
+            storage.loanParams = msg.loanParams;
+            storage.save();
+
+            // Forward the funding request to the bank, carrying remaining balance for gas
+            reserveToncoinsOnBalance(reserveAmount, 0);
+            createMessage({
+                bounce: false,
+                value: 0,
+                dest: msg.bankAddress,
+                body: BankRequestFunds{
+                    loanParams: msg.loanParams
+                }.toCell(),
+            }).send(SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS);
+        }
+
         else => {
             // ignore empty messages, "wrong opcode" for others
             assert (in.body.isEmpty()) throw 0xFFFF
@@ -199,14 +233,16 @@ fun onInternalMessage(in: InMessage) {
 fun onBouncedMessage(in: InMessageBounced) {
 }
 
-struct VersionedStorage{
+struct VersionedStorage {
     version: uint8 = 0;
     storage: Storage;
 }
 get fun data(): VersionedStorage {
     // return contract.getData();
     var storage = lazy Storage.load();
-    return VersionedStorage{storage};
+    return VersionedStorage{
+        storage
+    };
     // debug.printString("a1");
     // debug.print(ans.status.toCell());
     // debug.print(ans.nftAddress.toCell());
