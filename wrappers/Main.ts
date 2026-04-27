@@ -10,11 +10,13 @@ import {
     SendMode, toNano,
 } from '@ton/core';
 
-enum Status {
+export enum LoanStatus {
     NOT_INITIALIZED = 0,
     NOT_REPAYED = 1,
     REPAYED = 2,
     IN_PROGRESS = 3,
+    WAITING_FOR_FUNDS = 4,
+    CANCELLED = 5,
 }
 type Decimal = { nominator: number; denominator: number };
 type LoanParams = {
@@ -27,7 +29,7 @@ type OwnerAddresses = {
     borrower: Address; // owner of the NFT (who took the loan)
 };
 export type MainConfig = {
-    status: Status; // current status of the loan
+    status: LoanStatus; // current status of the loan
     nftAddress: Address; // address of the NFT collection
     jettonAddress: Address | null; // address of the Jetton, in which loan is given
     ownerAddresses: OwnerAddresses; // addresses of the contract owners
@@ -65,7 +67,7 @@ export function mainConfigToCell(config: MainConfig): Cell {
 }
 export function cellToMainConfig(cell: Cell): MainConfig {
     const slice = cell.beginParse();
-    const status: Status = slice.loadUint(3);
+    const status: LoanStatus = slice.loadUint(3);
     const nftAddress = slice.loadAddress()!;
     const jettonAddress = slice.loadMaybeAddress()!;
     const ownerAddressesCell = slice.loadRef()!;
@@ -233,8 +235,11 @@ export class Main implements Contract {
 
         // const ansCell = result.stack.readCell();
         // return cellToMainConfig(ansCell);
-
-        const status: Status = result.stack.readNumber();
+        const version = result.stack.readNumber();
+        if (version !== 0) {
+            throw new Error(`Unsupported data version: ${version}`);
+        }
+        const status: LoanStatus = result.stack.readNumber();
         const nftAddress = result.stack.readAddress()!;
         const jettonAddress = result.stack.readAddressOpt();
         const ownerAddressesCell = result.stack.readCell()!;

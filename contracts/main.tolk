@@ -1,16 +1,8 @@
 import "structs"
 import "utils"
+import "global-structs"
 import "@stdlib/common"
-tolk 1.0
-
-struct (0x7362d09c) TokenNotification {
-    queryId: uint64;
-    amount: coins;
-    from: address;
-    // byte: bool;
-    forwardPayload: cell;
-
-}
+tolk 1.2
 
 // the struct uses a 32-bit opcode prefix for message identification
 struct (0x94f712fc) CreateLoan {
@@ -41,6 +33,59 @@ struct (0x94f712ff) CancelLoadBeforeStart {
 type AllowedMessage = CreateLoan | RepayLoan | LoanNotRepayedWithdrawNFT | TokenNotification | ChangeLoanParams | GiveFunds | CancelLoadBeforeStart;
 type TokenNotificationType = GiveFunds | RepayLoan;
 // the main entrypoint: called when a contract receives an message from other contracts
+@inline
+fun parseTokenNotificationType(msg: TokenNotification, senderAddress: address, valueCoins: coins) {
+    var ref = lazy TokenNotificationType.fromCell(msg.forwardPayload);
+    match (ref) {
+        GiveFunds => {
+            try {
+                var storage = lazy Storage.load();
+                assert (ref.loanParams.equals(storage.loanParams)) throw loanParamsMismatchError;
+                assert (storage.status == Status.WAITING_FOR_FUNDS) throw invalidStatusError;
+                assert (senderAddress == storage.jettonAddress!) throw notJettonLoanError;
+                assert (msg.amount >= storage.loanParams.amount) throw notEnoughJettonError;
+                assert (valueCoins >= networkComissionTonJettonRepay) throw notEnoughTonError;
+                storage.status = Status.IN_PROGRESS;
+                storage.startedAt = blockchain.now();
+                var addresses = lazy storage.ownerAddresses.load();
+                addresses.moneyGiver = msg.from;
+                storage.ownerAddresses = addresses.toCell();
+                storage.save();
+                reserveToncoinsOnBalance(reserveAmount, 0);
+                jettonTransfer(senderAddress!, addresses.borrower, msg.amount, msg.from, loanStartedString());
+            } catch (e) {
+                debug.print(e);
+                reserveToncoinsOnBalance(reserveAmount, 0);
+                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString());
+            }
+        }
+        RepayLoan => {
+            try {
+                var storage = lazy Storage.load();
+                assert (senderAddress == storage.jettonAddress!) throw notJettonLoanError;
+                assert (storage.status == Status.IN_PROGRESS) throw invalidStatusError;
+                assert (storage.enoughRepaymentReceived(msg.amount)) throw notEnoughTonError;
+                assert (valueCoins >= ref.forwardAmount + networkComissionTonJettonRepay) throw notEnoughTonError;
+                storage.status = Status.REPAYED;
+                storage.save();
+                var addresses = lazy storage.ownerAddresses.load();
+                reserveToncoinsOnBalance(ton("0.001"), RESERVE_MODE_AT_MOST);
+                nftTransfer(storage.nftAddress, addresses.borrower, msg.from, ref.forwardPayload, ref.forwardAmount, SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_BOUNCE_ON_ACTION_FAIL, ton("0.04") + ref.forwardAmount);
+                jettonTransfer(storage.jettonAddress!, addresses.moneyGiver!, msg.amount, msg.from, loanRepayedString());
+            } catch (e) {
+                debug.print(e);
+                reserveToncoinsOnBalance(reserveAmount, 0);
+                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString());
+            }
+        }
+        else => {
+            reserveToncoinsOnBalance(reserveAmount, 0);
+            jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownMessageString());
+        }
+    }
+}
+
+
 fun onInternalMessage(in: InMessage) {
     // use `lazy` to defer loading fields until they are accessed
     val msg = lazy AllowedMessage.fromSlice(in.body);
@@ -109,58 +154,7 @@ fun onInternalMessage(in: InMessage) {
             }).send(SEND_MODE_CARRY_ALL_BALANCE);
         }
         TokenNotification => {
-            var ref = lazy TokenNotificationType.fromCell(msg.forwardPayload);
-            match (ref) {
-                GiveFunds => {
-                    debug.printString("TokenNotification<GiveFunds>");
-                    try {
-                        var storage = lazy Storage.load();
-                        assert (ref.loanParams.equals(storage.loanParams)) throw loanParamsMismatchError;
-                        assert (storage.status == Status.WAITING_FOR_FUNDS) throw invalidStatusError;
-                        assert (in.senderAddress == storage.jettonAddress!) throw notJettonLoanError;
-                        assert (msg.amount >= storage.loanParams.amount) throw notEnoughJettonError;
-                        assert (in.valueCoins >= networkComissionTonJettonRepay) throw notEnoughTonError;
-                        storage.status = Status.IN_PROGRESS;
-                        storage.startedAt = blockchain.now();
-                        var addresses = lazy storage.ownerAddresses.load();
-                        addresses.moneyGiver = msg.from;
-                        storage.ownerAddresses = addresses.toCell();
-                        storage.save();
-                        reserveToncoinsOnBalance(reserveAmount, 0);
-                        jettonTransfer(in.senderAddress!, addresses.borrower, msg.amount, msg.from, beginCell().storeRef("loan started".toCell()).endCell());
-                    } catch (e) {
-                        debug.print(e);
-                        reserveToncoinsOnBalance(reserveAmount, 0);
-                        jettonTransfer(in.senderAddress!, msg.from, msg.amount, msg.from, beginCell().storeRef("unknown error happened".toCell()).endCell());
-                    }
-                }
-                RepayLoan => {
-                    debug.printString("TokenNotification<RepayLoan>");
-                    try {
-                        var storage = lazy Storage.load();
-                        assert (in.senderAddress == storage.jettonAddress!) throw notJettonLoanError;
-                        assert (storage.status == Status.IN_PROGRESS) throw invalidStatusError;
-                        assert (storage.enoughRepaymentReceived(msg.amount)) throw notEnoughTonError;
-                        assert (in.valueCoins >= ref.forwardAmount + networkComissionTonJettonRepay) throw notEnoughTonError;
-                        storage.status = Status.REPAYED;
-                        storage.save();
-                        var addresses = lazy storage.ownerAddresses.load();
-                        reserveToncoinsOnBalance(ton("0.001"), RESERVE_MODE_AT_MOST);
-                        nftTransfer(storage.nftAddress, addresses.borrower, msg.from, ref.forwardPayload, ref.forwardAmount, SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_BOUNCE_ON_ACTION_FAIL, ton("0.04") + ref.forwardAmount);
-                        jettonTransfer(storage.jettonAddress!, addresses.moneyGiver!, msg.amount, msg.from, beginCell().storeRef("loan repay".toCell()).endCell());
-                    } catch (e) {
-                        debug.print(e);
-                        reserveToncoinsOnBalance(reserveAmount, 0);
-                        jettonTransfer(in.senderAddress!, msg.from, msg.amount, msg.from, beginCell().storeRef("unknown error happened".toCell()).endCell());
-                    }
-                }
-                else => {
-                    debug.printString("Invalid message received in TokenNotification");
-                    reserveToncoinsOnBalance(reserveAmount, 0);
-                    jettonTransfer(in.senderAddress!, msg.from, msg.amount, msg.from, beginCell().storeRef("unknown message received".toCell()).endCell());
-                }
-            }
-
+            parseTokenNotificationType(msg, in.senderAddress, in.valueCoins);
         }
 
         RepayLoan => {
@@ -205,10 +199,14 @@ fun onInternalMessage(in: InMessage) {
 fun onBouncedMessage(in: InMessageBounced) {
 }
 
-get fun data(): Storage {
+struct VersionedStorage{
+    version: uint8 = 0;
+    storage: Storage;
+}
+get fun data(): VersionedStorage {
     // return contract.getData();
-    var ans = lazy Storage.load();
-    return ans;
+    var storage = lazy Storage.load();
+    return VersionedStorage{storage};
     // debug.printString("a1");
     // debug.print(ans.status.toCell());
     // debug.print(ans.nftAddress.toCell());

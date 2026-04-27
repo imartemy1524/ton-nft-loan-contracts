@@ -1,5 +1,5 @@
 import "structs"
-
+import "global-structs"
 
 
 @inline
