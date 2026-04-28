@@ -4,6 +4,12 @@ build
 dist
 .DS_Store
 package.ts
+postgres-data
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # VS Code
 .vscode/*
