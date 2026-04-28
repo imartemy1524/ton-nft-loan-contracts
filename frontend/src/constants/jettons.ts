@@ -7,7 +7,12 @@ export interface JettonInfo {
     coingeckoId: string;
 }
 
-export const JETTONS: JettonInfo[] = [
+type JettonDefinition = Omit<JettonInfo, 'address'> & {
+    address: string | null;
+    testnetAddress?: string | null;
+};
+
+const JETTON_DEFINITIONS: JettonDefinition[] = [
     {
         symbol: 'TON',
         name: 'Toncoin',
@@ -20,6 +25,7 @@ export const JETTONS: JettonInfo[] = [
         symbol: 'USDT',
         name: 'Tether USD',
         address: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs',
+        testnetAddress: 'kQD0GKBM8ZbryVk2aESmzfU6b9b_8era_IkvBSELujFZPsyy',
         decimals: 6,
         icon: 'https://assets.dedust.io/images/usdt.webp',
         coingeckoId: 'tether',
@@ -33,3 +39,12 @@ export const JETTONS: JettonInfo[] = [
         coingeckoId: 'notcoin',
     },
 ];
+
+export function getJettons(isTestnet: boolean): JettonInfo[] {
+    return JETTON_DEFINITIONS.map(({ testnetAddress, ...j }) => ({
+        ...j,
+        address: isTestnet && testnetAddress !== undefined ? testnetAddress : j.address,
+    }));
+}
+
+export const JETTONS = getJettons(false);

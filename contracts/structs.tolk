@@ -65,12 +65,12 @@ fun Storage.enoughRepaymentReceived(self, receivedAmount: coins) {
 
 
 @inline
-fun unknownErrorHappendString(): cell asm """<b "unknown error happened" $, b> PUSHREF""";
+fun unknownErrorHappendString(): cell asm """<b 0 32 u, "unknown error happened" $, b> PUSHREF""";
 @inline
-fun unknownMessageString(): cell asm """<b "unknown message received" $, b> PUSHREF""";
+fun unknownMessageString(): cell asm """<b 0 32 u, "unknown message received" $, b> PUSHREF""";
 
 @inline
-fun loanRepayedString(): cell asm """<b "loan repayed successfully" $, b> PUSHREF""";
+fun loanRepayedString(): cell asm """<b 0 32 u, "loan repayed successfully" $, b> PUSHREF""";
 
 @inline
-fun loanStartedString(): cell asm """<b "loan started successfully" $, b> PUSHREF""";
+fun loanStartedString(): cell asm """<b 0 32 u, "loan started successfully" $, b> PUSHREF""";

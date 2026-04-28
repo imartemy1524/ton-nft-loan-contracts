@@ -1,8 +1,8 @@
 import { useTonConnectUI } from '@tonconnect/ui-react';
-import { Address, beginCell, toNano, storeStateInit, Sender, SenderArguments } from '@ton/core';
-import { Main, MainConfig, LoanStatus } from './contracts/Main';
+import { Address, beginCell, Cell, toNano, storeStateInit, Sender, SenderArguments } from '@ton/core';
+import { Main, MainConfig, LoanStatus, repayBody } from './contracts/Main';
 import { contractCode } from './contracts/code';
-import { createTonClient } from './contracts/utils';
+import { buildJettonTransfer, createTonClient } from './contracts/utils';
 import { buildNftTransferBody } from './contracts/nft';
 import { useNetwork } from '../network';
 
@@ -97,7 +97,29 @@ export function useMainContract() {
         await contract.sendGiveLoan(sender, loanParams.amount + toNano('0.1'), loanParams);
     };
 
-    const sendRepayLoan = async (contractAddress: string, value: bigint) => {
+    const sendRepayLoan = async (
+        contractAddress: string,
+        value: bigint,
+        jetton?: {
+            walletAddress: string;
+            responseAddress: string;
+        },
+    ) => {
+        if (jetton) {
+            await sender.send({
+                to: Address.parse(jetton.walletAddress),
+                value: toNano('0.25'),
+                body: buildJettonTransfer({
+                    amount: value,
+                    destination: Address.parse(contractAddress),
+                    responseDestination: Address.parse(jetton.responseAddress),
+                    forwardAmount: toNano('0.2') + 1n,
+                    forwardPayload: repayBody(beginCell().endCell(), 1n),
+                }),
+            });
+            return;
+        }
+
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
         await contract.sendRepayLoan(sender, {
             value: value + toNano('0.1'),
@@ -121,12 +143,27 @@ export function useMainContract() {
         await contract.sendWithdrawNftNotRepaid(sender);
     };
 
-    const sendAcceptOffer = async (contractAddress: string, bankAddress: string, loanParams: LoanParams) => {
+    const sendAcceptOffer = async (
+        contractAddress: string,
+        bankAddress: string,
+        loanParams: LoanParams,
+        jettonAddress: Address | null = null,
+    ) => {
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
-        await contract.sendAcceptOffer(sender, Address.parse(bankAddress), loanParams);
+        await contract.sendAcceptOffer(sender, Address.parse(bankAddress), loanParams, jettonAddress);
+    };
+
+    const ensureLoanContractCode = async (contractAddress: string) => {
+        const state = await tonclient.getContractState(Address.parse(contractAddress));
+        const codeHash = state.code ? Cell.fromBoc(state.code)[0]?.hash().toString('hex') : null;
+        const expectedHash = contractCode.hash().toString('hex');
+        if (codeHash !== expectedHash) {
+            throw new Error(`Address is not a supported loan contract: code hash ${codeHash ?? 'missing'} does not match ${expectedHash}`);
+        }
     };
 
     const getData = async (contractAddress: string) => {
+        await ensureLoanContractCode(contractAddress);
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
         return await contract.getData();
     };

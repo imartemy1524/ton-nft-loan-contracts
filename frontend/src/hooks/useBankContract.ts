@@ -1,10 +1,10 @@
 import { useCallback, useMemo } from 'react';
 import { useTonConnectUI } from '@tonconnect/ui-react';
-import { Address, beginCell, Contract, ContractProvider, Sender, SenderArguments, storeStateInit, toNano } from '@ton/core';
+import { Address, beginCell, Cell, Contract, ContractProvider, Sender, SenderArguments, storeStateInit, toNano, TupleItemSlice } from '@ton/core';
 import { Bank, BankOffer } from './contracts/Bank';
 import { LoanParams } from './contracts/Main';
 import { bankCode } from './contracts/code';
-import { createTonClient } from './contracts/utils';
+import { buildJettonTransfer, createTonClient } from './contracts/utils';
 import { useNetwork } from '../network';
 
 export type BankJettonAsset = {
@@ -45,6 +45,31 @@ class JettonWallet implements Contract {
     async getBalance(provider: ContractProvider) {
         const result = await provider.get('get_wallet_data', []);
         return result.stack.readBigNumber();
+    }
+
+    // TEP-74: get_wallet_data → (balance, owner, jetton_master, wallet_code)
+    async getMasterAddress(provider: ContractProvider): Promise<Address> {
+        const result = await provider.get('get_wallet_data', []);
+        result.stack.readBigNumber(); // balance
+        result.stack.readAddress();   // owner
+        return result.stack.readAddress(); // jetton_master
+    }
+}
+
+class JettonMaster implements Contract {
+    constructor(readonly address: Address) {}
+
+    static createFromAddress(address: Address) {
+        return new JettonMaster(address);
+    }
+
+    async getWalletAddress(provider: ContractProvider, ownerAddress: Address): Promise<Address> {
+        const ownerSlice: TupleItemSlice = {
+            type: 'slice',
+            cell: beginCell().storeAddress(ownerAddress).endCell(),
+        };
+        const result = await provider.get('get_wallet_address', [ownerSlice]);
+        return result.stack.readAddress();
     }
 }
 
@@ -90,7 +115,7 @@ export function useBankContract() {
 
     const getBankJettons = useCallback(
         async (bankAddress: string): Promise<BankJettonAsset[]> => {
-            const res = await fetch(`${tonapiBaseUrl}/v2/accounts/${bankAddress}/jettons`);
+            const res = await fetch(`${tonapiBaseUrl}/accounts/${bankAddress}/jettons`);
             if (!res.ok) return [];
             const data = await res.json();
             const balances = (data.balances || []) as Array<Record<string, unknown>>;
@@ -125,9 +150,17 @@ export function useBankContract() {
         [tonclient],
     );
 
+    const getJettonMasterAddress = useCallback(
+        async (jettonWalletAddress: string): Promise<Address> => {
+            const wallet = tonclient.open(JettonWallet.createFromAddress(Address.parse(jettonWalletAddress)));
+            return wallet.getMasterAddress();
+        },
+        [tonclient],
+    );
+
     const getBankNfts = useCallback(
         async (bankAddress: string): Promise<BankNftAsset[]> => {
-            const res = await fetch(`${tonapiBaseUrl}/v2/accounts/${bankAddress}/nfts?limit=3&indirect_ownership=false`);
+            const res = await fetch(`${tonapiBaseUrl}/accounts/${bankAddress}/nfts?limit=3&indirect_ownership=false`);
             if (!res.ok) return [];
             const data = await res.json();
             const items = (data.nft_items || []) as Array<Record<string, unknown>>;
@@ -172,10 +205,36 @@ export function useBankContract() {
         [sender, tonclient],
     );
 
+    const getJettonWalletAddress = useCallback(
+        async (ownerAddress: string, jettonMasterAddress: string): Promise<Address> => {
+            const master = tonclient.open(JettonMaster.createFromAddress(Address.parse(jettonMasterAddress)));
+            return master.getWalletAddress(Address.parse(ownerAddress));
+        },
+        [tonclient],
+    );
+
+    const sendDepositJetton = useCallback(
+        async (ownerAddress: string, jettonMasterAddress: string, amount: bigint) => {
+            const bankAddress = getBankContract(ownerAddress).address;
+            const userJettonWallet = await getJettonWalletAddress(ownerAddress, jettonMasterAddress);
+            await sendTransaction({
+                to: userJettonWallet,
+                value: toNano('0.1'),
+                body: buildJettonTransfer({
+                    amount,
+                    destination: bankAddress,
+                    responseDestination: Address.parse(ownerAddress),
+                    forwardAmount: 1n
+                }),
+            });
+        },
+        [sendTransaction, getJettonWalletAddress],
+    );
+
     const sendAddOffer = useCallback(
-        async (ownerAddress: string, loanAddress: string, loanParams: LoanParams, expirationDate: bigint) => {
+        async (ownerAddress: string, loanAddress: string, loanParams: LoanParams, expirationDate: bigint, jettonWallet: Address | null = null) => {
             const bank = tonclient.open(getBankContract(ownerAddress));
-            await bank.sendAddOffer(sender, Address.parse(loanAddress), loanParams, expirationDate, null);
+            await bank.sendAddOffer(sender, Address.parse(loanAddress), loanParams, expirationDate, jettonWallet);
         },
         [sender, tonclient],
     );
@@ -217,9 +276,12 @@ export function useBankContract() {
         getBankBalance,
         getBankJettons,
         getJettonWalletBalance,
+        getJettonWalletAddress,
+        getJettonMasterAddress,
         getBankNfts,
         tonviewerUrl,
         sendDepositTon,
+        sendDepositJetton,
         sendWithdrawTon,
         sendWithdrawJetton,
         sendWithdrawNft,

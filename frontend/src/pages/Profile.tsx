@@ -1,57 +1,51 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useTonAddress, useTonConnectUI } from '@tonconnect/ui-react';
+import { useTonConnectUI } from '@tonconnect/ui-react';
 import { fromNano } from '@ton/core';
-import { getOffers, refreshBank, StoredBankOffer, formatStoredOfferAmount } from '../api';
-import { BankJettonAsset, BankNftAsset, useBankContract } from '../hooks/useBankContract';
+import { formatStoredOfferAmount, getLoans, AggregatedLoan } from '../api';
+import { useBankData } from '../hooks/useBankData';
 import { useNetwork } from '../network';
-
-function formatJettonBalance(asset: BankJettonAsset) {
-    const base = 10 ** asset.decimals;
-    return `${(Number(asset.balance) / base).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${asset.symbol}`;
-}
+import { getJettons } from '../constants/jettons';
+import { LoanStatus } from '../hooks/contracts/Main';
+import { BankTonSection } from '../components/bank/BankTonSection';
+import { BankJettonsSection } from '../components/bank/BankJettonsSection';
+import { BankNftsSection } from '../components/bank/BankNftsSection';
 
 export default function Profile() {
-    const address = useTonAddress();
     const [tonConnectUI] = useTonConnectUI();
     const navigate = useNavigate();
-    const bank = useBankContract();
-    const { network } = useNetwork();
+    const { isTestnet, network } = useNetwork();
+    const jettons = getJettons(isTestnet);
+    const { address, bankAddress, bankBalance, jettons: bankJettons, nfts, offers, error, actionLoading, refresh, runAction, bank } = useBankData();
+
     const [contractAddr, setContractAddr] = useState('');
-    const [bankBalance, setBankBalance] = useState<bigint | null>(null);
-    const [balanceError, setBalanceError] = useState<string | null>(null);
     const [depositAmount, setDepositAmount] = useState('');
     const [withdrawAmount, setWithdrawAmount] = useState('');
-    const [actionLoading, setActionLoading] = useState(false);
-    const [offers, setOffers] = useState<StoredBankOffer[]>([]);
-    const [jettons, setJettons] = useState<BankJettonAsset[]>([]);
-    const [nfts, setNfts] = useState<BankNftAsset[]>([]);
-
-    const bankAddress = useMemo(() => (address ? bank.getBankAddress(address).toString() : ''), [address, bank]);
-
-    const refresh = async () => {
-        if (!bankAddress) return;
-        setBalanceError(null);
-        try {
-            const [balance, bankJettons, bankNfts] = await Promise.all([
-                bank.getBankBalance(bankAddress),
-                bank.getBankJettons(bankAddress),
-                bank.getBankNfts(bankAddress),
-            ]);
-            setBankBalance(balance);
-            setJettons(bankJettons);
-            setNfts(bankNfts);
-            await refreshBank(network, bankAddress).catch(() => null);
-            setOffers((await getOffers({ network, bankAddress })).offers);
-        } catch (e) {
-            console.error(e);
-            setBalanceError('Failed to load bank assets from TonAPI.');
-        }
-    };
+    const [loansGiven, setLoansGiven] = useState<AggregatedLoan[]>([]);
+    const [loansGot, setLoansGot] = useState<AggregatedLoan[]>([]);
+    const [loansLoading, setLoansLoading] = useState(false);
 
     useEffect(() => {
-        refresh();
-    }, [bankAddress, network]);
+        if (!address) return;
+
+        const loadLoans = async () => {
+            setLoansLoading(true);
+            try {
+                const [givenRes, gotRes] = await Promise.all([
+                    getLoans({ network, moneyGiverAddress: address, status: String(LoanStatus.IN_PROGRESS) }),
+                    getLoans({ network, borrowerAddress: address, status: String(LoanStatus.IN_PROGRESS) }),
+                ]);
+                setLoansGiven(givenRes.loans);
+                setLoansGot(gotRes.loans);
+            } catch (e) {
+                console.error('Failed to load active loans:', e);
+            } finally {
+                setLoansLoading(false);
+            }
+        };
+
+        loadLoans();
+    }, [address, network]);
 
     if (!address) {
         return (
@@ -78,19 +72,6 @@ export default function Profile() {
         if (addr) navigate(`/loan/${addr}`);
     };
 
-    const runBankAction = async (action: () => Promise<void>) => {
-        setActionLoading(true);
-        try {
-            await action();
-            setTimeout(refresh, 3000);
-        } catch (e) {
-            console.error(e);
-            alert('Bank transaction failed');
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
     return (
         <div className="space-y-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -107,15 +88,20 @@ export default function Profile() {
                 </button>
             </div>
 
+            {/* Trusted wallet card */}
             <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <div className="flex items-center gap-2">
-                            <h2 className="text-lg font-semibold">Bank</h2>
+                            <h2 className="text-lg font-semibold">Trusted Wallet</h2>
                             <span className="px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30 text-green-300 text-xs">
-                                Funds loans
+                                Secured on-chain
                             </span>
                         </div>
+                        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                          Wallet used to create offers.
+                          You can top-up it and withdraw funds anytime
+                        </p>
                         <p className="mt-1 text-xs text-[var(--color-text-secondary)] font-mono break-all">{bankAddress}</p>
                         <a
                             href={bank.tonviewerUrl(bankAddress)}
@@ -123,7 +109,7 @@ export default function Profile() {
                             rel="noreferrer"
                             className="mt-2 inline-block text-xs text-[var(--color-primary)] hover:underline"
                         >
-                            Open bank on Tonviewer
+                            Open trusted wallet on Tonviewer
                         </a>
                     </div>
                     <button
@@ -135,149 +121,159 @@ export default function Profile() {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4">
-                        <p className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider">Bank balance</p>
-                        <p className="mt-2 text-2xl font-semibold">{bankBalance === null ? '...' : `${fromNano(bankBalance)} TON`}</p>
-                        {balanceError && <p className="mt-2 text-xs text-red-300">{balanceError}</p>}
-                        {bankBalance !== null && bankBalance > 0n && (
-                            <button
-                                type="button"
-                                disabled={actionLoading}
-                                onClick={() => runBankAction(() => bank.sendWithdrawTon(address, fromNano(bankBalance)))}
-                                className="mt-4 w-full py-2 border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/50 disabled:opacity-50 text-white rounded-lg text-sm font-semibold cursor-pointer"
-                            >
-                                Withdraw all TON
-                            </button>
-                        )}
-                    </div>
-                    <form
-                        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4 space-y-3"
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            if (depositAmount) runBankAction(() => bank.sendDepositTon(address, depositAmount));
-                        }}
-                    >
-                        <label className="block text-xs text-[var(--color-text-secondary)]">Add balance to bank</label>
-                        <input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
-                            value={depositAmount}
-                            onChange={(e) => setDepositAmount(e.target.value)}
-                            placeholder="10"
-                            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)]"
-                        />
-                        <button disabled={actionLoading || !depositAmount} className="w-full py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 text-white rounded-lg text-sm font-semibold cursor-pointer">
-                            Deposit TON
-                        </button>
-                    </form>
-                    <form
-                        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4 space-y-3"
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            if (withdrawAmount) runBankAction(() => bank.sendWithdrawTon(address, withdrawAmount));
-                        }}
-                    >
-                        <label className="block text-xs text-[var(--color-text-secondary)]">Remove balance from bank</label>
-                        <input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
-                            value={withdrawAmount}
-                            onChange={(e) => setWithdrawAmount(e.target.value)}
-                            placeholder="5"
-                            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)]"
-                        />
-                        <button disabled={actionLoading || !withdrawAmount} className="w-full py-2 border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/50 disabled:opacity-50 text-white rounded-lg text-sm font-semibold cursor-pointer">
-                            Withdraw TON
-                        </button>
-                    </form>
-                </div>
+                <BankTonSection
+                    bankBalance={bankBalance}
+                    error={error}
+                    actionLoading={actionLoading}
+                    depositAmount={depositAmount}
+                    withdrawAmount={withdrawAmount}
+                    setDepositAmount={setDepositAmount}
+                    setWithdrawAmount={setWithdrawAmount}
+                    onDepositTon={(amount) => runAction(() => bank.sendDepositTon(address, amount))}
+                    onWithdrawTon={(amount) => runAction(() => bank.sendWithdrawTon(address, amount))}
+                    onWithdrawAll={() => runAction(() => bank.sendWithdrawTon(address, fromNano(bankBalance!)))}
+                />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4">
-                    <div>
-                        <h2 className="text-lg font-semibold">Top Bank Jettons</h2>
-                        <p className="text-sm text-[var(--color-text-secondary)]">Loaded from TonAPI for the bank address.</p>
-                    </div>
-                    {jettons.length === 0 ? (
-                        <p className="text-sm text-[var(--color-text-secondary)]">No jetton balances found.</p>
-                    ) : (
-                        <div className="space-y-3">
-                            {jettons.map((asset) => (
-                                <div key={asset.walletAddress} className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4 space-y-3">
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div className="min-w-0">
-                                            <p className="font-medium text-white">{formatJettonBalance(asset)}</p>
-                                            <p className="text-xs text-[var(--color-text-secondary)] truncate">{asset.name}</p>
-                                            <a
-                                                href={bank.tonviewerUrl(asset.masterAddress || asset.walletAddress)}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-xs text-[var(--color-primary)] hover:underline"
-                                            >
-                                                Tonviewer
-                                            </a>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            disabled={actionLoading}
-                                            onClick={() => runBankAction(() => bank.sendWithdrawJetton(address, asset.walletAddress, asset.balance))}
-                                            className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 text-white rounded-lg text-sm font-semibold cursor-pointer"
-                                        >
-                                            Withdraw all
-                                        </button>
-                                    </div>
-                                    <p className="text-[10px] text-[var(--color-text-secondary)] font-mono break-all">{asset.walletAddress}</p>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4">
-                    <div>
-                        <h2 className="text-lg font-semibold">Bank NFTs</h2>
-                        <p className="text-sm text-[var(--color-text-secondary)]">NFTs currently owned by the bank contract.</p>
-                    </div>
-                    {nfts.length === 0 ? (
-                        <p className="text-sm text-[var(--color-text-secondary)]">No NFTs found.</p>
-                    ) : (
-                        <div className="space-y-3">
-                            {nfts.map((asset) => (
-                                <div key={asset.address} className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4">
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                        <div className="min-w-0">
-                                            <p className="font-medium text-white truncate">{asset.name}</p>
-                                            {asset.collection && <p className="text-xs text-[var(--color-text-secondary)] truncate">{asset.collection}</p>}
-                                            <a
-                                                href={bank.tonviewerUrl(asset.address)}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-xs text-[var(--color-primary)] hover:underline"
-                                            >
-                                                Tonviewer
-                                            </a>
-                                            <p className="mt-1 text-[10px] text-[var(--color-text-secondary)] font-mono break-all">{asset.address}</p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            disabled={actionLoading}
-                                            onClick={() => runBankAction(() => bank.sendWithdrawNft(address, asset.address))}
-                                            className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 text-white rounded-lg text-sm font-semibold cursor-pointer"
-                                        >
-                                            Withdraw NFT
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+            {/* Jettons + NFTs */}
+            <div className={`grid gap-6 ${nfts.length === 0 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+                <BankJettonsSection
+                    jettons={bankJettons}
+                    availableJettons={jettons}
+                    actionLoading={actionLoading}
+                    tonviewerUrl={bank.tonviewerUrl}
+                    onWithdrawJetton={(walletAddress, balance) => runAction(() => bank.sendWithdrawJetton(address, walletAddress, balance))}
+                    onDepositJetton={(masterAddress, amount) => runAction(() => bank.sendDepositJetton(address, masterAddress, amount))}
+                />
+                {nfts.length > 0 && (
+                    <BankNftsSection
+                        nfts={nfts}
+                        actionLoading={actionLoading}
+                        tonviewerUrl={bank.tonviewerUrl}
+                        onWithdrawNft={(nftAddress) => runAction(() => bank.sendWithdrawNft(address, nftAddress))}
+                    />
+                )}
             </div>
 
+            {/* Loans as Lender */}
+            <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4">
+                <h2 className="text-lg font-semibold">Loans as Lender</h2>
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                    Active loans where you provided funds.
+                </p>
+                {loansLoading ? (
+                    <p className="text-sm text-[var(--color-text-secondary)]">Loading...</p>
+                ) : loansGiven.length === 0 ? (
+                    <p className="text-sm text-[var(--color-text-secondary)]">No active loans given yet.</p>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {loansGiven.map((loan) => {
+                            const rate = ((loan.interestNominator / loan.interestDenominator) * 100).toFixed(2);
+                            return (
+                                <Link
+                                    key={loan.address}
+                                    to={`/loan/${loan.address}`}
+                                    className="block bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 rounded-lg overflow-hidden no-underline transition-colors"
+                                >
+                                    <div className="flex gap-4 p-4">
+                                        <div className="w-20 h-20 rounded-lg bg-[var(--color-surface)] overflow-hidden shrink-0">
+                                            {loan.nftImage ? (
+                                                <img src={loan.nftImage} alt={loan.nftName || 'NFT'} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-xs text-[var(--color-text-secondary)]">NFT</div>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-white truncate">{loan.nftName || 'NFT-backed loan'}</p>
+                                                    <p className="text-xs text-[var(--color-text-secondary)] truncate">{loan.nftCollection || loan.nftAddress}</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                                                <div>
+                                                    <p className="text-[var(--color-text-secondary)]">Amount</p>
+                                                    <p className="text-white">{fromNano(BigInt(loan.amount))} {loan.tokenSymbol}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[var(--color-text-secondary)]">Duration</p>
+                                                    <p className="text-white">{Math.floor(loan.duration / 86400)}d</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[var(--color-text-secondary)]">Rate</p>
+                                                    <p className="text-white">{rate}%</p>
+                                                </div>
+                                            </div>
+                                            <p className="mt-3 text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{loan.address}</p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Loans as Borrower */}
+            <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4">
+                <h2 className="text-lg font-semibold">Loans as Borrower</h2>
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                    Active loans where you borrowed funds.
+                </p>
+                {loansLoading ? (
+                    <p className="text-sm text-[var(--color-text-secondary)]">Loading...</p>
+                ) : loansGot.length === 0 ? (
+                    <p className="text-sm text-[var(--color-text-secondary)]">No active loans borrowed yet.</p>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {loansGot.map((loan) => {
+                            const rate = ((loan.interestNominator / loan.interestDenominator) * 100).toFixed(2);
+                            return (
+                                <Link
+                                    key={loan.address}
+                                    to={`/loan/${loan.address}`}
+                                    className="block bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 rounded-lg overflow-hidden no-underline transition-colors"
+                                >
+                                    <div className="flex gap-4 p-4">
+                                        <div className="w-20 h-20 rounded-lg bg-[var(--color-surface)] overflow-hidden shrink-0">
+                                            {loan.nftImage ? (
+                                                <img src={loan.nftImage} alt={loan.nftName || 'NFT'} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-xs text-[var(--color-text-secondary)]">NFT</div>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-white truncate">{loan.nftName || 'NFT-backed loan'}</p>
+                                                    <p className="text-xs text-[var(--color-text-secondary)] truncate">{loan.nftCollection || loan.nftAddress}</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                                                <div>
+                                                    <p className="text-[var(--color-text-secondary)]">Amount</p>
+                                                    <p className="text-white">{fromNano(BigInt(loan.amount))} {loan.tokenSymbol}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[var(--color-text-secondary)]">Duration</p>
+                                                    <p className="text-white">{Math.floor(loan.duration / 86400)}d</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[var(--color-text-secondary)]">Rate</p>
+                                                    <p className="text-white">{rate}%</p>
+                                                </div>
+                                            </div>
+                                            <p className="mt-3 text-[10px] text-[var(--color-text-secondary)] font-mono truncate">{loan.address}</p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Open loan contract */}
             <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4">
                 <h2 className="text-lg font-semibold">Open Loan Contract</h2>
                 <p className="text-sm text-[var(--color-text-secondary)]">
@@ -302,30 +298,46 @@ export default function Profile() {
                 </div>
             </div>
 
+            {/* Trusted offers */}
             <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4">
-                <h2 className="text-lg font-semibold">Bank Offers</h2>
+                <h2 className="text-lg font-semibold">Trusted Offers</h2>
                 {offers.length === 0 ? (
-                    <p className="text-sm text-[var(--color-text-secondary)]">No offers created from this bank in this browser yet.</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">No trusted offers created from this wallet yet.</p>
                 ) : (
                     <div className="space-y-3">
-                        {offers.map((offer) => (
-                            <Link
-                                key={offer.id}
-                                to={`/loan/${offer.loanAddress}`}
-                                className="block bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 rounded-lg p-4 no-underline transition-colors"
-                            >
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p className="text-white font-medium">{formatStoredOfferAmount(offer)}</p>
-                                        <p className="text-xs text-[var(--color-text-secondary)] font-mono break-all">{offer.loanAddress}</p>
+                        {offers.map((offer) => {
+                            const offerAmount = BigInt(offer.amount);
+                            const isInvalid = bankBalance !== null && bankBalance < offerAmount;
+                            return (
+                                <Link
+                                    key={offer.id}
+                                    to={`/loan/${offer.loanAddress}`}
+                                    className={`block bg-[var(--color-bg)] border rounded-lg p-4 no-underline transition-colors ${
+                                        isInvalid
+                                            ? 'border-red-500/50 opacity-60 hover:border-red-500/70'
+                                            : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
+                                    }`}
+                                >
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-white font-medium">{formatStoredOfferAmount(offer)}</p>
+                                                {isInvalid && (
+                                                    <span className="px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-xs">
+                                                        Insufficient balance
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-[var(--color-text-secondary)] font-mono break-all">{offer.loanAddress}</p>
+                                        </div>
+                                        <div className="text-sm text-[var(--color-text-secondary)] sm:text-right">
+                                            <p>{Math.floor(offer.duration / 86400)} days</p>
+                                            <p>{((offer.interestNominator / offer.interestDenominator) * 100).toFixed(2)}% / day</p>
+                                        </div>
                                     </div>
-                                    <div className="text-sm text-[var(--color-text-secondary)] sm:text-right">
-                                        <p>{Math.floor(offer.duration / 86400)} days</p>
-                                        <p>{((offer.interestNominator / offer.interestDenominator) * 100).toFixed(2)}% / day</p>
-                                    </div>
-                                </div>
-                            </Link>
-                        ))}
+                                </Link>
+                            );
+                        })}
                     </div>
                 )}
             </div>

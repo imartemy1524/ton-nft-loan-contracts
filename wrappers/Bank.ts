@@ -164,6 +164,7 @@ export class Bank implements Contract {
         via: Sender,
         jettonWallet: Address,
         amount: bigint,
+        forwardPayload: Cell|null = null,
     ) {
         await provider.internal(via, {
             value: toNano('0.1'),
@@ -172,6 +173,7 @@ export class Bank implements Contract {
                 .storeUint(BankOpcodes.WITHDRAW_JETTON, 32)
                 .storeAddress(jettonWallet)
                 .storeCoins(amount)
+                .storeMaybeRef(forwardPayload)
                 .endCell(),
         });
     }

@@ -223,7 +223,7 @@ export class Main implements Contract {
         via: Sender,
         bankAddress: Address,
         loanParams: LoanParams,
-        jettonAddress?: Address,
+        jettonAddress: Address | null = null,
     ) {
         await provider.internal(via, {
             value: toNano('0.15'),
@@ -281,6 +281,7 @@ export class Main implements Contract {
         const status: LoanStatus = result.stack.readNumber();
         const nftAddress = result.stack.readAddress()!;
         const jettonAddress = result.stack.readAddressOpt();
+        console.log('Jetton address: ' + jettonAddress?.toString());
         const ownerAddressesCell = result.stack.readCell()!;
         const duration = result.stack.readNumber();
         const interestNominator = result.stack.readNumber();

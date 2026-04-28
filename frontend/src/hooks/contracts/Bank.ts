@@ -133,7 +133,7 @@ export class Bank implements Contract {
         });
     }
 
-    async sendWithdrawJetton(provider: ContractProvider, via: Sender, jettonWallet: Address, amount: bigint) {
+    async sendWithdrawJetton(provider: ContractProvider, via: Sender, jettonWallet: Address, amount: bigint, forwardPayload: Cell|null = null) {
         await provider.internal(via, {
             value: toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
@@ -141,6 +141,7 @@ export class Bank implements Contract {
                 .storeUint(BankOpcodes.WITHDRAW_JETTON, 32)
                 .storeAddress(jettonWallet)
                 .storeCoins(amount)
+                .storeMaybeRef(forwardPayload)
                 .endCell(),
         });
     }

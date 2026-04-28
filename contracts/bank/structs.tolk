@@ -30,6 +30,7 @@ struct (0xBA000004) WithdrawNft {
 struct (0xBA000005) WithdrawJetton {
     jettonWallet: address;
     amount: coins;
+    forwardPayload: cell?;
 }
 
 // Sent by a loan contract after borrower calls AcceptOffer on the loan

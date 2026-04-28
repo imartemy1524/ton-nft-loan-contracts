@@ -1,12 +1,22 @@
 import { Address } from '@ton/core';
 import { pool } from './db.js';
-import { getAccountBalance, getBankData, getLoanData, getNftMeta } from './chain.js';
+import { assertLoanContractCode, getAccountBalance, getBankData, getLoanData, getNftMeta } from './chain.js';
 import { Network } from './config.js';
+import { resolveTokenWallet } from './token-cache.js';
+import { getWhitelistedTokens, UNDEFINED_TOKEN } from './tokens.js';
+
+const NFT_LOCKED_STATUSES = new Set([0, 3, 4]);
 
 export async function refreshLoan(network: Network, address: string) {
     const parsedAddress = Address.parse(address).toString();
+    const codeHash = await assertLoanContractCode(network, parsedAddress);
     const data = await getLoanData(network, parsedAddress);
     const nft = await getNftMeta(network, data.nftAddress.toString());
+    const valid = !NFT_LOCKED_STATUSES.has(data.status) ||
+        (!!nft.ownerAddress && Address.parse(nft.ownerAddress).equals(Address.parse(parsedAddress)));
+    const loanToken = data.jettonAddress
+        ? await resolveTokenWallet(network, parsedAddress, data.jettonAddress.toString())
+        : null;
 
     const row = {
         network,
@@ -22,8 +32,16 @@ export async function refreshLoan(network: Network, address: string) {
         interestDenominator: data.loanParams.interestPerDay.denominator,
         startedAt: data.startedAt,
         nftName: nft.name,
+        nftDescription: nft.description,
         nftImage: nft.image,
         nftCollection: nft.collection,
+        nftCollectionAddress: nft.collectionAddress,
+        codeHash,
+        tokenAddress: loanToken?.masterAddress ?? null,
+        tokenSymbol: loanToken?.symbol ?? 'TON',
+        tokenName: loanToken?.name ?? 'Toncoin',
+        tokenDecimals: loanToken?.decimals ?? 9,
+        valid,
     };
 
     await pool.query(
@@ -31,9 +49,10 @@ export async function refreshLoan(network: Network, address: string) {
             insert into loans (
                 network, address, status, nft_address, jetton_address, borrower_address,
                 money_giver_address, amount, duration, interest_nominator,
-                interest_denominator, started_at, nft_name, nft_image, nft_collection, updated_at
+                interest_denominator, started_at, nft_name, nft_description, nft_image,
+                nft_collection, nft_collection_address, code_hash, valid, updated_at
             )
-            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
+            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,now())
             on conflict (network, address) do update set
                 status = excluded.status,
                 nft_address = excluded.nft_address,
@@ -46,8 +65,12 @@ export async function refreshLoan(network: Network, address: string) {
                 interest_denominator = excluded.interest_denominator,
                 started_at = excluded.started_at,
                 nft_name = excluded.nft_name,
+                nft_description = excluded.nft_description,
                 nft_image = excluded.nft_image,
                 nft_collection = excluded.nft_collection,
+                nft_collection_address = excluded.nft_collection_address,
+                code_hash = excluded.code_hash,
+                valid = excluded.valid,
                 updated_at = now()
         `,
         [
@@ -64,8 +87,12 @@ export async function refreshLoan(network: Network, address: string) {
             row.interestDenominator,
             row.startedAt,
             row.nftName,
+            row.nftDescription,
             row.nftImage,
             row.nftCollection,
+            row.nftCollectionAddress,
+            row.codeHash,
+            row.valid,
         ],
     );
 
@@ -98,19 +125,40 @@ export async function refreshBank(network: Network, address: string) {
         [network, bankAddress, ownerAddress, balance.toString()],
     );
 
+    const tonToken = getWhitelistedTokens(network).find((token) => token.symbol === 'TON') ?? {
+        symbol: 'TON',
+        name: 'Toncoin',
+        address: null,
+        decimals: 9,
+    };
+
     for (const loanAddress of data.offers.keys()) {
         const offer = data.offers.get(loanAddress);
         if (!offer) continue;
         const loan = loanAddress.toString();
         seenLoans.push(loan);
+
+        let jettonAddress: string | null = null;
+        let token = tonToken;
+        if (offer.jettonWallet !== null) {
+            try {
+                const resolved = await resolveTokenWallet(network, bankAddress, offer.jettonWallet.toString());
+                jettonAddress = resolved.masterAddress;
+                token = resolved;
+            } catch (error) {
+                console.warn(`Failed to resolve offer jetton wallet ${offer.jettonWallet.toString()}:`, error);
+                token = UNDEFINED_TOKEN;
+            }
+        }
+
         await pool.query(
             `
                 insert into offers (
                     network, bank_address, owner_address, loan_address, amount, duration,
                     interest_nominator, interest_denominator, expiration_date, jetton_wallet,
-                    active, updated_at
+                    jetton_address, token_symbol, token_name, token_decimals, active, updated_at
                 )
-                values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,now())
+                values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,true,now())
                 on conflict (network, bank_address, loan_address) do update set
                     owner_address = excluded.owner_address,
                     amount = excluded.amount,
@@ -119,6 +167,10 @@ export async function refreshBank(network: Network, address: string) {
                     interest_denominator = excluded.interest_denominator,
                     expiration_date = excluded.expiration_date,
                     jetton_wallet = excluded.jetton_wallet,
+                    jetton_address = excluded.jetton_address,
+                    token_symbol = excluded.token_symbol,
+                    token_name = excluded.token_name,
+                    token_decimals = excluded.token_decimals,
                     active = true,
                     updated_at = now()
             `,
@@ -133,6 +185,10 @@ export async function refreshBank(network: Network, address: string) {
                 offer.loanParams.interestPerDay.denominator,
                 offer.expirationDate.toString(),
                 offer.jettonWallet?.toString() ?? null,
+                jettonAddress,
+                token.symbol,
+                token.name,
+                token.decimals,
             ],
         );
 

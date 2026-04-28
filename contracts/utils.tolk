@@ -19,9 +19,9 @@ fun nftTransfer(nftAddress: address, newOwner: address, excessTo: address, forwa
 }
 
 @inline
-fun jettonTransfer(jettonAddress: address, to: address, amount: coins, excessTo: address, forwardPayload: cell, forwardAmount: coins = 1, mode: int = SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE | SEND_MODE_IGNORE_ERRORS, value: int = 0) {
+fun jettonTransfer(jettonAddress: address, to: address, amount: coins, excessTo: address, forwardPayload: cell?, forwardAmount: coins = 1, mode: int = SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE | SEND_MODE_IGNORE_ERRORS, value: int = 0) {
     createMessage({
-        bounce: false,
+        bounce: true,
         value,
         dest: jettonAddress,
         body: JettonTransfer{

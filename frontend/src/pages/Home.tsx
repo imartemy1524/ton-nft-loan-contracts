@@ -1,6 +1,33 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { getStats, IndexedStats } from '../api';
+import { useNetwork } from '../network';
+import { formatAmount } from '../utils/amounts';
+
+function formatVolume(stats: IndexedStats | null) {
+  if (!stats || stats.totalVolume.length === 0) return '--';
+  return stats.totalVolume
+    .slice(0, 2)
+    .map((volume) => `${formatAmount(BigInt(volume.amount), volume.tokenDecimals)} ${volume.tokenSymbol}`)
+    .join(' + ');
+}
 
 export default function Home() {
+  const { network } = useNetwork();
+  const [stats, setStats] = useState<IndexedStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStats(network)
+      .then(({ stats }) => {
+        if (!cancelled) setStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setStats(null);
+      });
+    return () => { cancelled = true; };
+  }, [network]);
+
   return (
     <div className="space-y-16">
       {/* Hero */}
@@ -65,10 +92,10 @@ export default function Home() {
       {/* Stats */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Loans', value: '--' },
-          { label: 'Total Volume', value: '--' },
-          { label: 'Active Loans', value: '--' },
-          { label: 'NFTs Locked', value: '--' },
+          { label: 'Total Loans', value: stats?.totalLoans ?? '--' },
+          { label: 'Total Volume', value: formatVolume(stats) },
+          { label: 'Active Loans', value: stats?.activeLoans ?? '--' },
+          { label: 'NFTs Locked', value: stats?.nftsLocked ?? '--' },
         ].map((stat) => (
           <div
             key={stat.label}

@@ -5,7 +5,7 @@ import { Address, toNano } from '@ton/core';
 import { useMainContract } from '../hooks/useMainContract';
 import { useTonNfts, NftItem } from '../hooks/useTonNfts';
 import { percentToDecimal } from '../utils/percentToDecimal';
-import { JETTONS } from '../constants/jettons';
+import { getJettons } from '../constants/jettons';
 import { useTokenPrices } from '../hooks/useTokenPrices';
 import { refreshLoan } from '../api';
 import { useNetwork } from '../network';
@@ -15,7 +15,8 @@ export default function GetLoan() {
     const walletAddress = useTonAddress();
     const { deployLoanContract } = useMainContract();
     const { nfts, loading: nftsLoading, error: nftsError } = useTonNfts();
-    const { network } = useNetwork();
+    const { network, isTestnet } = useNetwork();
+    const JETTONS = getJettons(isTestnet);
 
     const [selectedNft, setSelectedNft] = useState<NftItem | null>(null);
     const [amount, setAmount] = useState('');

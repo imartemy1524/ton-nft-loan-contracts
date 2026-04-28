@@ -7,6 +7,7 @@ import {
     ContractProvider,
     Dictionary,
     Slice,
+    TupleItemSlice,
 } from '@ton/core';
 
 export enum LoanStatus {
@@ -165,5 +166,43 @@ export class Bank implements Contract {
         );
 
         return { version, owner, offers };
+    }
+}
+
+export class JettonWallet implements Contract {
+    constructor(readonly address: Address) {}
+
+    static createFromAddress(address: Address) {
+        return new JettonWallet(address);
+    }
+
+    async getData(provider: ContractProvider): Promise<{
+        balance: bigint;
+        owner: Address;
+        master: Address;
+    }> {
+        const result = await provider.get('get_wallet_data', []);
+        return {
+            balance: result.stack.readBigNumber(),
+            owner: result.stack.readAddress(),
+            master: result.stack.readAddress(),
+        };
+    }
+}
+
+export class JettonMaster implements Contract {
+    constructor(readonly address: Address) {}
+
+    static createFromAddress(address: Address) {
+        return new JettonMaster(address);
+    }
+
+    async getWalletAddress(provider: ContractProvider, owner: Address): Promise<Address> {
+        const ownerSlice: TupleItemSlice = {
+            type: 'slice',
+            cell: beginCell().storeAddress(owner).endCell(),
+        };
+        const result = await provider.get('get_wallet_address', [ownerSlice]);
+        return result.stack.readAddress();
     }
 }

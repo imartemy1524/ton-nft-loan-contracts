@@ -42,14 +42,14 @@ struct (0x5fcc3d14) NftTransfer<T> {
     forwardAmount: coins;
     forwardPayload: T;
 }
-struct (0x0f8a7ea5) JettonTransfer<T> {
+struct (0x0f8a7ea5) JettonTransfer {
     queryId: uint64 = 0;
     amount: coins;
     destination: address;
     excessTo: address;
     customPayload: cell? = null;
     forwardTonAmount: coins;
-    forwardPayload: T;
+    forwardPayload: cell?;
 }
 
 struct (0x7362d09c) TokenNotification {
