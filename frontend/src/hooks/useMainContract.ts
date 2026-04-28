@@ -110,7 +110,7 @@ export function useMainContract() {
                     destination: Address.parse(contractAddress),
                     responseDestination: Address.parse(jetton.responseAddress),
                     forwardAmount: toNano('0.2') + 1n,
-                    forwardPayload: giveMoneyBody(loanParams, ownerAddress),
+                    forwardPayload: giveMoneyBody(loanParams, ownerAddress ?? null),
                 }),
             });
             return;

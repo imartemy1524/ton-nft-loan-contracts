@@ -1,7 +1,6 @@
 import { LoanParams } from './hooks/contracts/Main';
 import { Network } from './network';
 import { formatAmount } from './utils/amounts';
-import { getJettons } from './constants/jettons';
 import { JettonInfo, getJettons } from './constants/jettons';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');

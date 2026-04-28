@@ -171,7 +171,7 @@ export class Main implements Contract {
         return await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: giveMoneyBody(data),
+            body: giveMoneyBody(data, null),
         });
     }
 
