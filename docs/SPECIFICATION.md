@@ -580,4 +580,4 @@ Bank (Trusted Wallet) Contract
 
 ---
 
-*All source code is available at: [GitHub repository link]*
+*All source code is available at: https://github.com/imartemy1524/ton-nft-loan-contracts*
