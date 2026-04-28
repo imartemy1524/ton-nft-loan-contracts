@@ -19,8 +19,9 @@ export default function Header() {
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
-        <Link to="/" className="text-xl font-bold text-white no-underline flex items-center gap-2">
-          <span className="text-[var(--color-primary)]">TON</span> NFT Loans
+        <Link to="/" className="text-xl font-bold text-white no-underline flex items-center gap-2.5">
+          <img src="/logo.svg" alt="" className="w-7 h-7" />
+          <span><span className="text-[var(--color-primary)]">TON</span> NFT Loans</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1">
