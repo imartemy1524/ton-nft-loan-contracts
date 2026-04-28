@@ -2,7 +2,7 @@ import { Address } from '@ton/core';
 import { pool } from './db.js';
 import { assertLoanContractCode, getAccountBalance, getBankData, getLoanData, getNftMeta } from './chain.js';
 import { Network } from './config.js';
-import { resolveTokenWallet } from './token-cache.js';
+import { resolveTokenWallet, type ResolvedTokenWallet } from './token-cache.js';
 import { getWhitelistedTokens, UNDEFINED_TOKEN } from './tokens.js';
 
 const NFT_LOCKED_STATUSES = new Set([0, 3, 4]);
@@ -14,16 +14,24 @@ export async function refreshLoan(network: Network, address: string) {
     const nft = await getNftMeta(network, data.nftAddress.toString());
     const valid = !NFT_LOCKED_STATUSES.has(data.status) ||
         (!!nft.ownerAddress && Address.parse(nft.ownerAddress).equals(Address.parse(parsedAddress)));
-    const loanToken = data.jettonAddress
-        ? await resolveTokenWallet(network, parsedAddress, data.jettonAddress.toString())
-        : null;
+    
+    let jettonAddress: string | null = data.jettonAddress?.toString() ?? null;
+    let loanToken: ResolvedTokenWallet | null = null;
+    
+    if (jettonAddress) {
+        try {
+            loanToken = await resolveTokenWallet(network, parsedAddress, jettonAddress);
+        } catch (error) {
+            console.warn(`Failed to resolve loan jetton wallet ${jettonAddress}:`, error);
+        }
+    }
 
     const row = {
         network,
         address: parsedAddress,
         status: data.status,
         nftAddress: data.nftAddress.toString(),
-        jettonAddress: data.jettonAddress?.toString() ?? null,
+        jettonAddress,
         borrowerAddress: data.ownerAddresses.borrower.toString(),
         moneyGiverAddress: data.ownerAddresses.moneyGiver?.toString() ?? null,
         amount: data.loanParams.amount.toString(),
@@ -38,8 +46,8 @@ export async function refreshLoan(network: Network, address: string) {
         nftCollectionAddress: nft.collectionAddress,
         codeHash,
         tokenAddress: loanToken?.masterAddress ?? null,
-        tokenSymbol: loanToken?.symbol ?? 'TON',
-        tokenName: loanToken?.name ?? 'Toncoin',
+        tokenSymbol: loanToken?.symbol ?? (jettonAddress ? 'Undefined token' : 'TON'),
+        tokenName: loanToken?.name ?? (jettonAddress ? 'Undefined token' : 'Toncoin'),
         tokenDecimals: loanToken?.decimals ?? 9,
         valid,
     };

@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import { z } from 'zod';
+import { Address } from '@ton/core';
 import { parseNetwork } from './config.js';
 import { initDb, pool } from './db.js';
 import { refreshBank, refreshLoan } from './refresh.js';
@@ -19,20 +20,29 @@ function networkFromQuery(value: unknown) {
     return parseNetwork(typeof value === 'string' ? value : process.env.DEFAULT_NETWORK);
 }
 
+function normalizeAddress(address: string | null): string | null {
+    if (!address) return null;
+    try {
+        return Address.parse(address).toString();
+    } catch {
+        return address;
+    }
+}
+
 function mapOffer(row: Record<string, unknown>) {
     return {
         id: `${row.bank_address}:${row.loan_address}`,
         network: row.network,
-        bankAddress: row.bank_address,
-        ownerAddress: row.owner_address,
-        loanAddress: row.loan_address,
+        bankAddress: normalizeAddress(String(row.bank_address)),
+        ownerAddress: normalizeAddress(String(row.owner_address)),
+        loanAddress: normalizeAddress(String(row.loan_address)),
         amount: row.amount,
         duration: row.duration,
         interestNominator: row.interest_nominator,
         interestDenominator: row.interest_denominator,
         expirationDate: String(row.expiration_date),
-        jettonWallet: row.jetton_wallet,
-        jettonAddress: row.jetton_address,
+        jettonWallet: normalizeAddress(row.jetton_wallet ? String(row.jetton_wallet) : null),
+        jettonAddress: normalizeAddress(row.jetton_address ? String(row.jetton_address) : null),
         tokenSymbol: row.token_symbol ?? (row.jetton_wallet ? 'Undefined token' : 'TON'),
         tokenName: row.token_name ?? (row.jetton_wallet ? 'Undefined token' : 'Toncoin'),
         tokenDecimals: Number(row.token_decimals ?? 9),
@@ -44,12 +54,12 @@ function mapOffer(row: Record<string, unknown>) {
 function mapLoan(row: Record<string, unknown>) {
     return {
         network: row.network,
-        address: row.address,
+        address: normalizeAddress(String(row.address)),
         status: row.status,
-        nftAddress: row.nft_address,
-        jettonAddress: row.jetton_address,
-        borrowerAddress: row.borrower_address,
-        moneyGiverAddress: row.money_giver_address,
+        nftAddress: normalizeAddress(String(row.nft_address)),
+        jettonAddress: normalizeAddress(row.jetton_address ? String(row.jetton_address) : null),
+        borrowerAddress: normalizeAddress(String(row.borrower_address)),
+        moneyGiverAddress: normalizeAddress(row.money_giver_address ? String(row.money_giver_address) : null),
         amount: row.amount,
         duration: row.duration,
         interestNominator: row.interest_nominator,
@@ -59,10 +69,10 @@ function mapLoan(row: Record<string, unknown>) {
         nftDescription: row.nft_description,
         nftImage: row.nft_image,
         nftCollection: row.nft_collection,
-        nftCollectionAddress: row.nft_collection_address,
+        nftCollectionAddress: normalizeAddress(row.nft_collection_address ? String(row.nft_collection_address) : null),
         codeHash: row.code_hash,
         valid: row.valid,
-        tokenAddress: row.token_address ?? null,
+        tokenAddress: normalizeAddress(row.token_address ? String(row.token_address) : null),
         tokenSymbol: row.token_symbol ?? (row.jetton_address ? 'Undefined token' : 'TON'),
         tokenName: row.token_name ?? (row.jetton_address ? 'Undefined token' : 'Toncoin'),
         tokenDecimals: Number(row.token_decimals ?? 9),
@@ -109,8 +119,11 @@ app.get('/api/offers', async (req, res, next) => {
         ] as const) {
             const value = req.query[queryKey];
             if (typeof value === 'string' && value) {
-                params.push(value);
-                where.push(`${column} = $${params.length}`);
+                const normalizedValue = normalizeAddress(value);
+                if (normalizedValue) {
+                    params.push(normalizedValue);
+                    where.push(`${column} = $${params.length}`);
+                }
             }
         }
 
@@ -152,8 +165,11 @@ app.get('/api/loans', async (req, res, next) => {
         ] as const) {
             const value = req.query[queryKey];
             if (typeof value === 'string' && value) {
-                params.push(value);
-                where.push(`${column} = $${params.length}`);
+                const normalizedValue = normalizeAddress(value);
+                if (normalizedValue) {
+                    params.push(normalizedValue);
+                    where.push(`${column} = $${params.length}`);
+                }
             }
         }
 
@@ -210,7 +226,19 @@ app.get('/api/loans', async (req, res, next) => {
             params,
         );
 
-        res.json({ loans: result.rows.map(mapLoan) });
+        const loans = result.rows.map(mapLoan);
+        
+        // Trigger async refresh for loans with null jettonAddress
+        const loansToRefresh = result.rows.filter((row) => !row.jetton_address);
+        if (loansToRefresh.length > 0) {
+            Promise.all(loansToRefresh.map((row) => refreshLoan(network, row.address).catch((err) => {
+                console.warn(`Failed to refresh loan ${row.address}:`, err);
+            }))).catch((err) => {
+                console.warn('Error refreshing loans with null jettonAddress:', err);
+            });
+        }
+
+        res.json({ loans });
     } catch (error) {
         next(error);
     }

@@ -18,7 +18,7 @@ export type OfferFundingStatus = {
     reason: string;
 };
 
-type NftMeta = { name: string; description?: string; image?: string; collection?: string };
+type NftMeta = { name: string; description?: string; image?: string; collection?: string; collectionAddress?: string };
 type TonApiPreview = { resolution?: string; url?: string };
 
 const TON_OFFER_GAS_RESERVE = toNano('0.05');
@@ -105,7 +105,8 @@ export function useLoan(contractAddr: string | undefined) {
             const nft = await fetchNftMeta(data.nftAddress.toString());
             getLoans({ network, loanAddress: contractAddr, hasOffers: false })
                 .then(({ loans }) => {
-                    if (!loans[0] || !indexedLoanMatchesChain(loans[0], data, nft)) {
+                    const jettonNotParsed = loans[0]?.jettonAddress && loans[0].tokenSymbol === 'Undefined token';
+                    if (!loans[0] || !indexedLoanMatchesChain(loans[0], data, nft) || jettonNotParsed) {
                         return refreshLoan(network, contractAddr);
                     }
                     return null;
@@ -147,6 +148,7 @@ export function useLoan(contractAddr: string | undefined) {
                     d.previews?.[0]?.url ||
                     d.metadata?.image,
                 collection: d.collection?.name,
+                collectionAddress: d.collection?.address,
             };
             setNftMeta(meta);
             return meta;

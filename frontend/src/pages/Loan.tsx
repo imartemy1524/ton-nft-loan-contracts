@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useNetwork } from '../network';
 import { LoanStatus } from '../hooks/contracts/Main';
 import { useLoan } from '../hooks/useLoan';
 import { formatAmount } from '../utils/amounts';
@@ -16,9 +17,15 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; cls: string; dot: strin
 
 type LoanState = ReturnType<typeof useLoan>;
 
+function getGemsUrl(nftAddress: string, collectionAddress: string | null | undefined, isTestnet: boolean) {
+    const base = isTestnet ? 'https://testnet.getgems.io' : 'https://getgems.io';
+    return `${base}/collection/${collectionAddress ?? ''}/${nftAddress}`;
+}
+
 export default function Loan() {
     const { address: contractAddr } = useParams<{ address: string }>();
     const navigate = useNavigate();
+    const { isTestnet } = useNetwork();
     const loan = useLoan(contractAddr);
 
     if (loan.loading) {
@@ -105,9 +112,27 @@ export default function Loan() {
                             )}
                         </div>
                         <div className="p-4 space-y-0.5">
-                            <p className="font-semibold truncate">{loan.nftMeta?.name ?? '—'}</p>
+                            <a
+                                href={getGemsUrl(loan.loanInfo.nftAddress.toString(), loan.nftMeta?.collectionAddress, isTestnet)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-semibold truncate block hover:text-[var(--color-primary)] transition-colors"
+                            >
+                                {loan.nftMeta?.name ?? '—'}
+                            </a>
                             {loan.nftMeta?.collection && (
-                                <p className="text-xs text-[var(--color-text-secondary)] truncate">{loan.nftMeta.collection}</p>
+                                loan.nftMeta.collectionAddress ? (
+                                    <a
+                                        href={`${isTestnet ? 'https://testnet.getgems.io' : 'https://getgems.io'}/collection/${loan.nftMeta.collectionAddress}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs text-[var(--color-text-secondary)] truncate block hover:text-[var(--color-primary)] transition-colors"
+                                    >
+                                        {loan.nftMeta.collection}
+                                    </a>
+                                ) : (
+                                    <p className="text-xs text-[var(--color-text-secondary)] truncate">{loan.nftMeta.collection}</p>
+                                )
                             )}
                             <p className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate pt-1">
                                 {loan.loanInfo.nftAddress.toString()}
@@ -178,6 +203,8 @@ export default function Loan() {
 }
 
 function LoanParamsCard({ loan }: { loan: LoanState }) {
+    const { isTestnet } = useNetwork();
+    const tvBase = isTestnet ? 'https://testnet.tonviewer.com' : 'https://tonviewer.com';
     const decimals = loan.token?.decimals ?? 9;
     const fmt = (nano: bigint) => `${formatAmount(nano, decimals)} ${loan.tokenSymbol}`;
     const usd = (nano: bigint) =>
@@ -220,11 +247,15 @@ function LoanParamsCard({ loan }: { loan: LoanState }) {
                 <span className="col-span-2 border-t border-[var(--color-border)]" />
 
                 <span className="text-[var(--color-text-secondary)]">Borrower</span>
-                <span className="font-mono text-xs break-all">{loan.loanInfo!.ownerAddresses.borrower.toString()}</span>
+                <a href={`${tvBase}/${loan.loanInfo!.ownerAddresses.borrower.toString()}`} target="_blank" rel="noreferrer" className="font-mono text-xs break-all hover:text-[var(--color-primary)] transition-colors">
+                    {loan.loanInfo!.ownerAddresses.borrower.toString()}
+                </a>
 
                 <span className="text-[var(--color-text-secondary)]">Lender</span>
                 {loan.loanInfo!.ownerAddresses.moneyGiver ? (
-                    <span className="font-mono text-xs break-all">{loan.loanInfo!.ownerAddresses.moneyGiver.toString()}</span>
+                    <a href={`${tvBase}/${loan.loanInfo!.ownerAddresses.moneyGiver.toString()}`} target="_blank" rel="noreferrer" className="font-mono text-xs break-all hover:text-[var(--color-primary)] transition-colors">
+                        {loan.loanInfo!.ownerAddresses.moneyGiver.toString()}
+                    </a>
                 ) : (
                     <span className="text-xs text-[var(--color-text-secondary)] italic">Not funded yet</span>
                 )}

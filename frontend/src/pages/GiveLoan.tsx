@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { fromNano } from '@ton/core';
 import { AggregatedLoan, getLoans } from '../api';
+import { formatAmount } from '../utils/amounts';
 import { useNetwork } from '../network';
 import { LoanStatus } from '../hooks/contracts/Main';
 
 export default function GiveLoan() {
     const navigate = useNavigate();
-    const { network } = useNetwork();
+    const { network, isTestnet } = useNetwork();
     const [contractAddr, setContractAddr] = useState('');
     const [loans, setLoans] = useState<AggregatedLoan[]>([]);
     const [status, setStatus] = useState('');
@@ -142,15 +142,35 @@ export default function GiveLoan() {
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <p className="font-semibold text-white truncate">{loan.nftName || 'NFT-backed loan'}</p>
-                                                    <p className="text-xs text-[var(--color-text-secondary)] truncate">{loan.nftCollection || loan.nftAddress}</p>
+                                                    <a
+                                                        href={`${isTestnet ? 'https://testnet.getgems.io' : 'https://getgems.io'}/collection/${loan.nftCollectionAddress ?? ''}/${loan.nftAddress}`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="font-semibold text-white truncate block hover:text-[var(--color-primary)] transition-colors"
+                                                    >
+                                                        {loan.nftName || 'NFT-backed loan'}
+                                                    </a>
+                                                    {loan.nftCollectionAddress ? (
+                                                        <a
+                                                            href={`${isTestnet ? 'https://testnet.getgems.io' : 'https://getgems.io'}/collection/${loan.nftCollectionAddress}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="text-xs text-[var(--color-text-secondary)] truncate block hover:text-[var(--color-primary)] transition-colors"
+                                                        >
+                                                            {loan.nftCollection || loan.nftAddress}
+                                                        </a>
+                                                    ) : (
+                                                        <p className="text-xs text-[var(--color-text-secondary)] truncate">{loan.nftCollection || loan.nftAddress}</p>
+                                                    )}
                                                 </div>
                                                 <span className="text-xs text-[var(--color-primary)] whitespace-nowrap">{loan.offersCount} offers</span>
                                             </div>
                                             <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                                                 <div>
                                                     <p className="text-[var(--color-text-secondary)]">Amount</p>
-                                                    <p className="text-white">{fromNano(BigInt(loan.amount))} TON</p>
+                                                    <p className="text-white">{formatAmount(BigInt(loan.amount), loan.tokenDecimals)} {loan.tokenSymbol}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[var(--color-text-secondary)]">Duration</p>

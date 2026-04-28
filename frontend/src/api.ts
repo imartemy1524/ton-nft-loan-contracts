@@ -1,6 +1,8 @@
 import { LoanParams } from './hooks/contracts/Main';
 import { Network } from './network';
 import { formatAmount } from './utils/amounts';
+import { getJettons } from './constants/jettons';
+import { JettonInfo, getJettons } from './constants/jettons';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
@@ -151,4 +153,60 @@ export function loanParamsFromStoredOffer(offer: StoredBankOffer): LoanParams {
 
 export function formatStoredOfferAmount(offer: StoredBankOffer) {
     return `${formatAmount(BigInt(offer.amount), offer.tokenDecimals ?? 9)} ${offer.tokenSymbol ?? 'TON'}`;
+}
+
+export function isLoanTokenValid(loan: AggregatedLoan, isTestnet: boolean): boolean {
+    const jettons = getJettons(isTestnet);
+    
+    // If it's TON (no jettonAddress), token must be TON
+    if (!loan.jettonAddress) {
+        return loan.tokenSymbol === 'TON' && loan.tokenDecimals === 9;
+    }
+    
+    // If it has a jettonAddress, check if we know this token
+    const knownToken = jettons.find((j) => j.address && j.address.toLowerCase() === loan.tokenAddress?.toLowerCase());
+    
+    // If we know the token, validate it matches
+    if (knownToken) {
+        return loan.tokenSymbol === knownToken.symbol && loan.tokenDecimals === knownToken.decimals;
+    }
+    
+    // If we don't know it and it's not "Undefined token", something's wrong
+    if (loan.tokenSymbol === 'Undefined token') {
+        return true; // Valid - we just don't know this token yet
+    }
+    
+    return false;
+}
+
+export function validateLoanToken(loan: AggregatedLoan, isTestnet: boolean): boolean {
+    const jettons = getJettons(isTestnet);
+    
+    // If it's TON (no jettonAddress), token must be TON
+    if (!loan.jettonAddress) {
+        return loan.tokenSymbol === 'TON' && loan.tokenDecimals === 9;
+    }
+    
+    // If it has a jettonAddress, check if we know this token
+    const knownToken = jettons.find((j) => j.address && j.address.toLowerCase() === loan.tokenAddress?.toLowerCase());
+    
+    // If we know the token, validate it matches
+    if (knownToken) {
+        return loan.tokenSymbol === knownToken.symbol && loan.tokenDecimals === knownToken.decimals;
+    }
+    
+    // If we don't know it and it's not "Undefined token", something's wrong
+    if (loan.tokenSymbol === 'Undefined token') {
+        return true; // Valid - we just don't know this token yet
+    }
+    
+    return false;
+}
+
+export async function refreshLoanToken(network: Network, address: string) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    return request<{ loan: unknown }>('/api/refresh/loan', {
+        method: 'POST',
+        body: JSON.stringify({ network, address }),
+    });
 }
