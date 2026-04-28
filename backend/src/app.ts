@@ -10,6 +10,11 @@ const app = express();
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') || true }));
 app.use(express.json());
+
+app.get('/health', (_req, res) => {
+    res.json({ ok: true });
+});
+
 app.use(async (_req, _res, next) => {
     try {
         await ensureDb();
@@ -89,10 +94,6 @@ function mapLoan(row: Record<string, unknown>) {
         updatedAt: row.updated_at,
     };
 }
-
-app.get('/health', (_req, res) => {
-    res.json({ ok: true });
-});
 
 app.post('/api/refresh/loan', async (req, res, next) => {
     try {
