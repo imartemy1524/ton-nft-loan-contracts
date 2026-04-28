@@ -61,11 +61,13 @@ fun parseTokenNotificationType(msg: TokenNotification, senderAddress: address, v
                 storage.ownerAddresses = addresses.toCell();
                 storage.save();
                 reserveToncoinsOnBalance(reserveAmount, 0);
-                jettonTransfer(senderAddress!, addresses.borrower, msg.amount, msg.from, loanStartedString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+                jettonTransfer(senderAddress!, addresses.borrower, msg.amount, msg.from, loanStartedString(), 1, SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
             } catch (e) {
                 debug.print(e);
                 reserveToncoinsOnBalance(reserveAmount, 0);
-                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString(), 1,SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+                commitContractDataAndActions();
+                throw e;
             }
         }
         RepayLoan => {
@@ -84,12 +86,16 @@ fun parseTokenNotificationType(msg: TokenNotification, senderAddress: address, v
             } catch (e) {
                 debug.print(e);
                 reserveToncoinsOnBalance(reserveAmount, 0);
-                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+                jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownErrorHappendString(), 1, SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+                commitContractDataAndActions();
+                throw e;
             }
         }
         else => {
             reserveToncoinsOnBalance(reserveAmount, 0);
-            jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownMessageString(), SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+            jettonTransfer(senderAddress!, msg.from, msg.amount, msg.from, unknownMessageString(), 1, SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_CARRY_ALL_BALANCE);
+            commitContractDataAndActions();
+            throw 0xFFFF;
         }
     }
 }
@@ -111,7 +117,7 @@ fun onInternalMessage(in: InMessage) {
                 bounce: false,
                 value: 0,
                 dest: in.senderAddress,
-                body: beginCell().storeRef("loan created".toCell()).endCell(),
+                body: loanCreatedString(),
             });
             msg.send(SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS);
         }
@@ -127,7 +133,7 @@ fun onInternalMessage(in: InMessage) {
                 bounce: false,
                 value: 0,
                 dest: in.senderAddress,
-                body: beginCell().storeRef("loan params changed".toCell()).endCell(),
+                body: loanParamsChangedString(),
             }).send(SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_IGNORE_ERRORS);
         }
         CancelLoadBeforeStart => {
@@ -159,7 +165,7 @@ fun onInternalMessage(in: InMessage) {
                 bounce: false,
                 value: 0,
                 dest: addresses.borrower,
-                body: beginCell().storeRef("loan started".toCell()).endCell(),
+                body: loanStartedString()
             }).send(SEND_MODE_CARRY_ALL_BALANCE);
         }
         TokenNotification => {

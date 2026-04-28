@@ -12,7 +12,7 @@ type NftMeta = {
     collectionAddress: string | null;
 };
 
-export const EXPECTED_LOAN_CODE_HASH = '5392acc74175f3b9672f9a3f5d3bd72e33a3d562c81cdb074159b358daacd81b';
+export const EXPECTED_LOAN_CODE_HASH = 'bcc21d90094ac9ef58ae162a4e841662e4d7d24f4e89567b326664b1c23d543c';
 
 export function createClient(network: Network) {
     return new TonClient({

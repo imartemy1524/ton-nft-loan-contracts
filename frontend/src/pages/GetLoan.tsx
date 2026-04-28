@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTonAddress } from '@tonconnect/ui-react';
-import { Address, toNano } from '@ton/core';
+import { Address } from '@ton/core';
+import { scaleAmount } from '../utils/amounts';
 import { useMainContract } from '../hooks/useMainContract';
 import { useTonNfts, NftItem } from '../hooks/useTonNfts';
 import { percentToDecimal } from '../utils/percentToDecimal';
@@ -40,7 +41,7 @@ export default function GetLoan() {
                 {
                     duration: parseInt(duration) * 86400,
                     interestPerDay: percentToDecimal(interestPct),
-                    amount: toNano(amount),
+                    amount: scaleAmount(amount, jetton?.decimals ?? 9),
                 },
                 parsedJetton,
             );

@@ -148,7 +148,6 @@ export class Main implements Contract {
         });
     }
     async sendGiveLoan(provider: ContractProvider, via: Sender, value: bigint, data: LoanParams) {
-
         return await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
@@ -171,13 +170,9 @@ export class Main implements Contract {
             body: repayBody(opts.forwardPayload, opts.forwardAmount),
         });
     }
-    async sendChangeLoanParams(
-        provider: ContractProvider,
-        via: Sender,
-        newParams: LoanParams,
-    ) {
+    async sendChangeLoanParams(provider: ContractProvider, via: Sender, newParams: LoanParams) {
         await provider.internal(via, {
-            value: toNano("0.05"),
+            value: toNano('0.05'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                 .storeUint(Opcodes.OP_CHANGE_LOAN_PARAMS, 32) // OP_CHANGE_LOAN_PARAMS
@@ -186,16 +181,11 @@ export class Main implements Contract {
         });
     }
 
-    async sendCancelBeforeStart(
-        provider: ContractProvider,
-        via: Sender,
-    ) {
+    async sendCancelBeforeStart(provider: ContractProvider, via: Sender) {
         return await provider.internal(via, {
-            value: toNano("0.05"),
+            value: toNano('0.05'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                .storeUint(Opcodes.OP_CANCEL_BEFORE_START, 32)
-                .endCell(),
+            body: beginCell().storeUint(Opcodes.OP_CANCEL_BEFORE_START, 32).endCell(),
         });
     }
     //
@@ -221,7 +211,7 @@ export class Main implements Contract {
         via: Sender,
         bankAddress: Address,
         loanParams: LoanParams,
-        jettonAddress?: Address|null,
+        jettonAddress?: Address | null,
     ) {
         await provider.internal(via, {
             value: toNano('0.15'),
@@ -235,16 +225,13 @@ export class Main implements Contract {
         });
     }
 
-    async sendWithdrawNftNotRepaid(
-        provider: ContractProvider,
-        via: Sender,
-    ) {
+    async sendWithdrawNftNotRepaid(provider: ContractProvider, via: Sender) {
         return await provider.internal(via, {
-            value: toNano("0.06"),
+            value: toNano('0.06'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                 .storeUint(Opcodes.OP_LOAN_NOT_REPAYED_WITHDRAW_NFT, 32)
-                .storeRef(beginCell().storeStringTail("Loan not repayed, withdrawing NFT").endCell())
+                .storeRef(beginCell().storeStringTail('Loan not repayed, withdrawing NFT').endCell())
                 .storeCoins(1n)
                 .endCell(),
         });

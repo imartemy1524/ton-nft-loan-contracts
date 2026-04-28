@@ -1,5 +1,20 @@
-import { Address, beginCell, Cell, toNano } from '@ton/core';
+import { Address, beginCell, Cell, Contract, ContractProvider, toNano, TupleItemSlice } from '@ton/core';
 import { TonClient } from '@ton/ton';
+
+class JettonMaster implements Contract {
+    constructor(readonly address: Address) {}
+    static createFromAddress(address: Address) { return new JettonMaster(address); }
+    async getWalletAddress(provider: ContractProvider, owner: Address): Promise<Address> {
+        const ownerSlice: TupleItemSlice = { type: 'slice', cell: beginCell().storeAddress(owner).endCell() };
+        const result = await provider.get('get_wallet_address', [ownerSlice]);
+        return result.stack.readAddress();
+    }
+}
+
+export async function resolveJettonWalletAddress(tonclient: TonClient, masterAddress: Address, ownerAddress: Address): Promise<Address> {
+    const master = tonclient.open(JettonMaster.createFromAddress(masterAddress));
+    return master.getWalletAddress(ownerAddress);
+}
 import { Network } from '../../network';
 
 /**
@@ -34,11 +49,7 @@ export function buildJettonTransfer({
         .storeAddress(responseDestination) // excess gas refund target
         .storeBit(false)             // no custom_payload
         .storeCoins(forwardAmount)   // TON forwarded with transfer notification
-        .storeBit(false);            // forward_payload in-place
-
-    if (forwardPayload) {
-        body.storeRef(forwardPayload);
-    }
+        .storeMaybeRef(forwardPayload);            // forward_payload in-place
 
     return body.endCell();
 }

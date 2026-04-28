@@ -74,3 +74,10 @@ fun loanRepayedString(): cell asm """<b 0 32 u, "loan repayed successfully" $, b
 
 @inline
 fun loanStartedString(): cell asm """<b 0 32 u, "loan started successfully" $, b> PUSHREF""";
+
+@inline
+fun loanCreatedString(): cell asm """<b 0 32 u, "loan created" $, b> PUSHREF""";
+
+
+@inline
+fun loanParamsChangedString(): cell asm """<b 0 32 u, "loan params changed" $, b> PUSHREF """

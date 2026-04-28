@@ -170,7 +170,14 @@ export default function GiveLoan() {
                                             <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                                                 <div>
                                                     <p className="text-[var(--color-text-secondary)]">Amount</p>
-                                                    <p className="text-white">{formatAmount(BigInt(loan.amount), loan.tokenDecimals)} {loan.tokenSymbol}</p>
+                                                    <p className="text-white">
+                                                        {formatAmount(BigInt(loan.amount), loan.tokenDecimals)}{' '}
+                                                        {loan.tokenAddress ? (
+                                                            <a href={`${isTestnet ? 'https://testnet.tonviewer.com' : 'https://tonviewer.com'}/${loan.tokenAddress}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="hover:text-[var(--color-primary)] transition-colors">
+                                                                {loan.tokenSymbol === 'Undefined token' ? '???' : loan.tokenSymbol}
+                                                            </a>
+                                                        ) : (loan.tokenSymbol === 'Undefined token' ? '???' : loan.tokenSymbol)}
+                                                    </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[var(--color-text-secondary)]">Duration</p>

@@ -87,7 +87,21 @@ export async function resolveTokenWallet(network: Network, ownerAddress: string,
             return resolved;
         }
     } catch {
-        // The child wallet may not be deployed yet. Fall through to deterministic derivation.
+        // The child wallet may not be deployed yet (child not exists).
+        // Try USDT specifically before falling through to the general derivation loop.
+        const usdtToken = getWhitelistedTokens(network).find((t) => t.symbol === 'USDT');
+        if (usdtToken?.address) {
+            try {
+                const usdtWallet = await getJettonWalletAddress(network, usdtToken.address, owner);
+                if (usdtWallet.equals(Address.parse(wallet))) {
+                    const resolved = resolvedFromToken(wallet, usdtToken.address, usdtToken, false);
+                    await saveTokenWallet(network, owner, resolved);
+                    return resolved;
+                }
+            } catch {
+                // USDT derivation failed, fall through to general loop.
+            }
+        }
     }
 
     for (const token of getWhitelistedTokens(network)) {

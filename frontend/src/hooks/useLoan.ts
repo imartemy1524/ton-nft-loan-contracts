@@ -24,8 +24,8 @@ type TonApiPreview = { resolution?: string; url?: string };
 const TON_OFFER_GAS_RESERVE = toNano('0.05');
 const JETTON_OFFER_GAS_RESERVE = toNano('0.2');
 const UNDEFINED_TOKEN: JettonInfo = {
-    symbol: 'Undefined token',
-    name: 'Undefined token',
+    symbol: '???',
+    name: 'Unknown token',
     address: null,
     decimals: 9,
     icon: '',
@@ -78,6 +78,7 @@ export function useLoan(contractAddr: string | undefined) {
     const [offerFundingStatuses, setOfferFundingStatuses] = useState<Record<string, OfferFundingStatus>>({});
     const [offerTokenMap, setOfferTokenMap] = useState<Record<string, JettonInfo | null>>({});
     const [loanToken, setLoanToken] = useState<JettonInfo | null>(null);
+    const [backendLoan, setBackendLoan] = useState<AggregatedLoan | null>(null);
 
     // change-params form
     const [showChangeParams, setShowChangeParams] = useState(false);
@@ -105,7 +106,8 @@ export function useLoan(contractAddr: string | undefined) {
             const nft = await fetchNftMeta(data.nftAddress.toString());
             getLoans({ network, loanAddress: contractAddr, hasOffers: false })
                 .then(({ loans }) => {
-                    const jettonNotParsed = loans[0]?.jettonAddress && loans[0].tokenSymbol === 'Undefined token';
+                    setBackendLoan(loans[0] ?? null);
+                    const jettonNotParsed = loans[0]?.jettonAddress && (loans[0].tokenSymbol === 'Undefined token' || loans[0].tokenSymbol === '???');
                     if (!loans[0] || !indexedLoanMatchesChain(loans[0], data, nft) || jettonNotParsed) {
                         return refreshLoan(network, contractAddr);
                     }
@@ -186,7 +188,8 @@ export function useLoan(contractAddr: string | undefined) {
                 let tokenPromise = loanTokenCache.get(cacheKey);
                 if (!tokenPromise) {
                     tokenPromise = bank.getJettonMasterAddress(loanJettonAddress).then((masterAddress) => {
-                        return jettons.find((j) => j.address !== null && Address.parse(j.address).equals(masterAddress)) ?? UNDEFINED_TOKEN;
+                        return jettons.find((j) => j.address !== null && Address.parse(j.address).equals(masterAddress))
+                            ?? { ...UNDEFINED_TOKEN, address: masterAddress.toString() };
                     }).catch(() => UNDEFINED_TOKEN);
                     loanTokenCache.set(cacheKey, tokenPromise);
                 }
@@ -212,6 +215,21 @@ export function useLoan(contractAddr: string | undefined) {
             }
         }
     }, [loanInfo, loanToken]);
+
+    // If local resolution returned UNDEFINED_TOKEN and the backend has resolved token data, use it.
+    useEffect(() => {
+        if (loanToken?.symbol !== '???' || !backendLoan || !loanJettonAddress) return;
+        if (backendLoan.jettonAddress !== loanJettonAddress) return;
+        if (!backendLoan.tokenAddress || backendLoan.tokenSymbol === 'Undefined token' || backendLoan.tokenSymbol === '???') return;
+        setLoanToken({
+            symbol: backendLoan.tokenSymbol,
+            name: backendLoan.tokenName,
+            address: backendLoan.tokenAddress,
+            decimals: backendLoan.tokenDecimals,
+            icon: '',
+            coingeckoId: '',
+        });
+    }, [loanToken, backendLoan, loanJettonAddress]);
 
     useEffect(() => { loadOffers(); }, [contractAddr, walletAddress, network]);
 
@@ -336,7 +354,21 @@ export function useLoan(contractAddr: string | undefined) {
             responseAddress: walletAddress,
         });
     });
-    const onFund = () => handleAction(() => sendGiveLoan(contractAddr!, loanInfo!.loanParams));
+    const onFund = () => handleAction(async () => {
+        if (!loanInfo?.jettonAddress) {
+            await sendGiveLoan(contractAddr!, loanInfo!.loanParams);
+            return;
+        }
+        if (!walletAddress) return;
+        const masterAddress = token?.address
+            ? token.address
+            : (await bank.getJettonMasterAddress(loanInfo.jettonAddress.toString())).toString();
+        const lenderJettonWallet = await bank.getJettonWalletAddress(walletAddress, masterAddress);
+        await sendGiveLoan(contractAddr!, loanInfo!.loanParams, {
+            walletAddress: lenderJettonWallet.toString(),
+            responseAddress: walletAddress,
+        });
+    });
     const onCancel = () => handleAction(() => sendCancelBeforeStart(contractAddr!));
     const onWithdrawNft = () => handleAction(() => sendWithdrawNftNotRepaid(contractAddr!));
 

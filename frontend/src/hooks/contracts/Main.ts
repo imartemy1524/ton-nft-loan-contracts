@@ -111,10 +111,10 @@ export function cellToMainConfig(cell: Cell): MainConfig {
         },
     };
 }
-export function giveMoneyBody(data: LoanParams): Cell {
+export function giveMoneyBody(data: LoanParams, ownerAddress: Address|null): Cell {
     return beginCell().storeUint(Opcodes.OP_GIVE_MONEY, 32).store(
         storeLoanParams(data)
-    ).endCell()
+    ).storeAddress(ownerAddress).endCell()
 }
 export function repayBody(forwardPayload: Cell, forwardAmount: bigint): Cell {
     return beginCell()

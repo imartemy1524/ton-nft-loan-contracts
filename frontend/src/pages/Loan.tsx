@@ -244,6 +244,20 @@ function LoanParamsCard({ loan }: { loan: LoanState }) {
                     {loan.tokenPrice && <span className="text-sm font-normal text-[var(--color-text-secondary)] ml-1.5">{usd(loan.totalRepayment)}</span>}
                 </span>
 
+                {loan.token?.address && (
+                    <>
+                        <span className="text-[var(--color-text-secondary)]">Token</span>
+                        <a
+                            href={`${tvBase}/${loan.token.address}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium hover:text-[var(--color-primary)] transition-colors"
+                        >
+                            {loan.tokenSymbol}
+                        </a>
+                    </>
+                )}
+
                 <span className="col-span-2 border-t border-[var(--color-border)]" />
 
                 <span className="text-[var(--color-text-secondary)]">Borrower</span>
