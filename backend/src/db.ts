@@ -4,7 +4,18 @@ const { Pool } = pg;
 
 export const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://ton:ton@localhost:5432/ton_nft_loan',
+    ssl: process.env.DATABASE_URL?.includes('neon.tech') || process.env.DATABASE_URL?.includes('vercel')
+        ? { rejectUnauthorized: false }
+        : false,
 });
+
+let dbInitialized = false;
+export async function ensureDb() {
+    if (!dbInitialized) {
+        await initDb();
+        dbInitialized = true;
+    }
+}
 
 export async function initDb() {
     await pool.query(`
