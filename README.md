@@ -1,5 +1,8 @@
 # TON NFT Loans
 
+**Live app:** https://ton-nft-loan-app.vercel.app  
+**Backend API:** https://ton-nft-loan-backend.vercel.app/health
+
 A decentralised peer-to-peer lending protocol on the TON blockchain where borrowers collateralise their NFTs to receive instant crypto loans (TON, USDT, or NOT) without selling their assets.
 
 ---
