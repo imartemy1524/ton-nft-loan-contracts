@@ -30,6 +30,7 @@ struct (0x94f712ff) CancelLoadBeforeStart {
 struct (0x94f712f0) AcceptOffer {
     bankAddress: address;
     loanParams: LoanParams; // must match the bank's stored offer exactly
+    jettonAddress: address?;
 }
 
 // Mirrors bank/structs.tolk BankRequestFunds (opcode 0xBA000006)
@@ -208,6 +209,7 @@ fun onInternalMessage(in: InMessage) {
 
             // Adopt the bank's loan params; the bank will reject if they don't match its offer
             storage.loanParams = msg.loanParams;
+            storage.jettonAddress = msg.jettonAddress;
             storage.save();
 
             // Forward the funding request to the bank, carrying remaining balance for gas

@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ton_nft_loan
+      POSTGRES_USER: ton
+      POSTGRES_PASSWORD: ton
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ton -d ton_nft_loan"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://ton:ton@postgres:5432/ton_nft_loan
+      CORS_ORIGIN: http://localhost:5173
+      DEFAULT_NETWORK: testnet
+      TONCENTER_MAINNET_URL: https://toncenter.com/api/v2/jsonRPC
+      TONCENTER_TESTNET_URL: https://testnet.toncenter.com/api/v2/jsonRPC
+      TONCENTER_API_KEY: ${TONCENTER_API_KEY:-}
+      TONAPI_API_KEY: ${TONAPI_API_KEY:-}
+      TONAPI_MAINNET_URL: https://tonapi.io
+      TONAPI_TESTNET_URL: https://testnet.tonapi.io
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

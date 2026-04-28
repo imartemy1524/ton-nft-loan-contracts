@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { TonConnectButton } from '@tonconnect/ui-react';
+import { useTonAddress, useTonConnectUI } from '@tonconnect/ui-react';
 import { useNetwork } from '../network';
 
 const navLinks = [
@@ -12,6 +12,9 @@ const navLinks = [
 export default function Header() {
   const location = useLocation();
   const { network, isTestnet, toggleNetwork } = useNetwork();
+  const address = useTonAddress();
+  const [tonConnectUI] = useTonConnectUI();
+  const shortAddress = address ? `${address.slice(0, 4)}...${address.slice(-4)}` : null;
 
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -47,7 +50,23 @@ export default function Header() {
           >
             {network}
           </button>
-          <TonConnectButton />
+          {address ? (
+            <Link
+              to="/profile"
+              title={address}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--color-border)] bg-[var(--color-bg)] text-white no-underline hover:border-[var(--color-primary)]/50 transition-colors"
+            >
+              {shortAddress}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => tonConnectUI.openModal()}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--color-primary)] bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer"
+            >
+              Connect
+            </button>
+          )}
         </div>
       </div>
     </header>

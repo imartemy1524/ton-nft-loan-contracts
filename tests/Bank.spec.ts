@@ -192,6 +192,7 @@ describe('Bank — TON loans', () => {
             borrower.getSender(),
             bank.address,
             LOAN_PARAMS,
+            null
         );
         printTransactionFees(transactions);
 
@@ -241,6 +242,7 @@ describe('Bank — TON loans', () => {
             borrower.getSender(),
             bank.address,
             LOAN_PARAMS,
+            null
         );
         expect(transactions).toHaveTransaction({
             from: loan.address,
@@ -256,6 +258,7 @@ describe('Bank — TON loans', () => {
             borrower.getSender(),
             bank.address,
             LOAN_PARAMS,
+            null
         );
         expect(transactions).toHaveTransaction({
             from: loan.address,
@@ -273,6 +276,7 @@ describe('Bank — TON loans', () => {
             borrower.getSender(),
             bank.address,
             LOAN_PARAMS,
+            null
         );
         expect(transactions).toHaveTransaction({
             from: loan.address,
@@ -289,6 +293,7 @@ describe('Bank — TON loans', () => {
             stranger.getSender(), // not the borrower
             bank.address,
             LOAN_PARAMS,
+            null
         );
         expect(transactions).toHaveTransaction({
             to: loan.address,
@@ -484,6 +489,7 @@ describe('Bank — Jetton loans', () => {
             borrower.getSender(),
             bank.address,
             LOAN_PARAMS,
+            loanJetton.address
         );
         printTransactionFees(transactions);
 

@@ -17,6 +17,23 @@ export interface NftItem {
     previews?: { resolution: string; url: string }[];
 }
 
+type TonApiNftItem = {
+    address: string;
+    index: number;
+    trust?: string;
+    collection?: {
+        address: string;
+        name: string;
+    };
+    metadata?: {
+        name?: string;
+        image?: string;
+        description?: string;
+        is_scam?: boolean;
+    };
+    previews?: { resolution: string; url: string }[];
+};
+
 export function useTonNfts() {
     const walletAddress = useTonAddress();
     const { config } = useNetwork();
@@ -25,14 +42,23 @@ export function useTonNfts() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        let cancelled = false;
+
         if (!walletAddress) {
-            setNfts([]);
-            return;
+            queueMicrotask(() => {
+                if (!cancelled) setNfts([]);
+            });
+            return () => {
+                cancelled = true;
+            };
         }
 
-        let cancelled = false;
-        setLoading(true);
-        setError(null);
+        queueMicrotask(() => {
+            if (!cancelled) {
+                setLoading(true);
+                setError(null);
+            }
+        });
 
         fetch(`${config.tonapiUrl}/accounts/${walletAddress}/nfts?limit=100&indirect_ownership=false`)
             .then((res) => {
@@ -41,11 +67,11 @@ export function useTonNfts() {
             })
             .then((data) => {
                 if (cancelled) return;
-                const items: NftItem[] = (data.nft_items || [])
-                    .filter((item: any) =>  item.trust !== 'blacklist')
-                    .filter((item: any) => !item.metadata?.is_scam)
-                    .filter((item: any) => item.collection || item.metadata?.name)
-                    .map((item: any) => ({
+                const items: NftItem[] = ((data.nft_items || []) as TonApiNftItem[])
+                    .filter((item) =>  item.trust !== 'blacklist')
+                    .filter((item) => !item.metadata?.is_scam)
+                    .filter((item) => item.collection || item.metadata?.name)
+                    .map((item) => ({
                         address: item.address,
                         index: item.index,
                         collection: item.collection

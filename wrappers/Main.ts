@@ -221,6 +221,7 @@ export class Main implements Contract {
         via: Sender,
         bankAddress: Address,
         loanParams: LoanParams,
+        jettonAddress?: Address|null,
     ) {
         await provider.internal(via, {
             value: toNano('0.15'),
@@ -229,6 +230,7 @@ export class Main implements Contract {
                 .storeUint(Opcodes.OP_ACCEPT_OFFER, 32)
                 .storeAddress(bankAddress)
                 .store(storeLoanParams(loanParams))
+                .storeAddress(jettonAddress)
                 .endCell(),
         });
     }

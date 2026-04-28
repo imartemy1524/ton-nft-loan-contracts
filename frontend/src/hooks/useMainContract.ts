@@ -1,5 +1,5 @@
 import { useTonConnectUI } from '@tonconnect/ui-react';
-import { Address, beginCell, toNano, Cell, storeStateInit } from '@ton/core';
+import { Address, beginCell, toNano, storeStateInit, Sender, SenderArguments } from '@ton/core';
 import { Main, MainConfig, LoanStatus } from './contracts/Main';
 import { contractCode } from './contracts/code';
 import { createTonClient } from './contracts/utils';
@@ -13,8 +13,8 @@ export function useMainContract() {
     const { network } = useNetwork();
     const tonclient = createTonClient(network);
 
-    const sender = {
-        send: async (args: { to: Address; value: bigint; body?: Cell; init?: { code: Cell; data: Cell } }) => {
+    const sender: Sender = {
+        send: async (args: SenderArguments) => {
 
             await tonConnectUI.sendTransaction({
                 validUntil: Math.floor(Date.now() / 1000) + 360,
@@ -94,12 +94,12 @@ export function useMainContract() {
 
     const sendGiveLoan = async (contractAddress: string, loanParams: LoanParams) => {
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
-        await contract.sendGiveLoan(sender as any, loanParams.amount + toNano('0.1'), loanParams);
+        await contract.sendGiveLoan(sender, loanParams.amount + toNano('0.1'), loanParams);
     };
 
     const sendRepayLoan = async (contractAddress: string, value: bigint) => {
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
-        await contract.sendRepayLoan(sender as any, {
+        await contract.sendRepayLoan(sender, {
             value: value + toNano('0.1'),
             forwardPayload: beginCell().storeStringTail('Repaying loan').endCell(),
             forwardAmount: 1n,
@@ -108,17 +108,22 @@ export function useMainContract() {
 
     const sendChangeLoanParams = async (contractAddress: string, newParams: LoanParams) => {
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
-        await contract.sendChangeLoanParams(sender as any, newParams);
+        await contract.sendChangeLoanParams(sender, newParams);
     };
 
     const sendCancelBeforeStart = async (contractAddress: string) => {
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
-        await contract.sendCancelBeforeStart(sender as any);
+        await contract.sendCancelBeforeStart(sender);
     };
 
     const sendWithdrawNftNotRepaid = async (contractAddress: string) => {
         const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
-        await contract.sendWithdrawNftNotRepaid(sender as any);
+        await contract.sendWithdrawNftNotRepaid(sender);
+    };
+
+    const sendAcceptOffer = async (contractAddress: string, bankAddress: string, loanParams: LoanParams) => {
+        const contract = tonclient.open(Main.createFromAddress(Address.parse(contractAddress)));
+        await contract.sendAcceptOffer(sender, Address.parse(bankAddress), loanParams);
     };
 
     const getData = async (contractAddress: string) => {
@@ -133,6 +138,7 @@ export function useMainContract() {
         sendChangeLoanParams,
         sendCancelBeforeStart,
         sendWithdrawNftNotRepaid,
+        sendAcceptOffer,
         getData,
     };
 }

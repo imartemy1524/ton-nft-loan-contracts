@@ -8,6 +8,14 @@ import { useTokenPrices } from '../hooks/useTokenPrices';
 import { useNetwork } from '../network';
 import { JETTONS } from '../constants/jettons';
 import { percentToDecimal } from '../utils/percentToDecimal';
+import { useBankContract } from '../hooks/useBankContract';
+import {
+    getOffers,
+    loanParamsFromStoredOffer,
+    refreshBank,
+    refreshLoan,
+    StoredBankOffer,
+} from '../api';
 
 const STATUS_CONFIG: Record<LoanStatus, { label: string; cls: string; dot: string }> = {
     [LoanStatus.NOT_INITIALIZED]: {
@@ -43,12 +51,21 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; cls: string; dot: strin
 };
 
 type NftMeta = { name: string; image?: string; collection?: string };
+type TonApiPreview = { resolution?: string; url?: string };
+type OfferFundingStatus = {
+    checking: boolean;
+    fundable: boolean;
+    reason: string;
+};
+
+const TON_OFFER_GAS_RESERVE = toNano('0.05');
+const JETTON_OFFER_GAS_RESERVE = toNano('0.2');
 
 export default function Loan() {
     const { address: contractAddr } = useParams<{ address: string }>();
     const walletAddress = useTonAddress();
     const navigate = useNavigate();
-    const { config } = useNetwork();
+    const { config, network } = useNetwork();
     const {
         getData,
         sendRepayLoan,
@@ -56,7 +73,9 @@ export default function Loan() {
         sendCancelBeforeStart,
         sendChangeLoanParams,
         sendWithdrawNftNotRepaid,
+        sendAcceptOffer,
     } = useMainContract();
+    const bank = useBankContract();
     const prices = useTokenPrices();
 
     const [loanInfo, setLoanInfo] = useState<MainConfig | null>(null);
@@ -68,6 +87,13 @@ export default function Loan() {
     const [newAmount, setNewAmount] = useState('');
     const [newDuration, setNewDuration] = useState('');
     const [newInterest, setNewInterest] = useState('');
+    const [bankBalance, setBankBalance] = useState<bigint | null>(null);
+    const [offers, setOffers] = useState<StoredBankOffer[]>([]);
+    const [offerFundingStatuses, setOfferFundingStatuses] = useState<Record<string, OfferFundingStatus>>({});
+    const [offerAmount, setOfferAmount] = useState('');
+    const [offerDuration, setOfferDuration] = useState('7');
+    const [offerInterest, setOfferInterest] = useState('1.00');
+    const [offerExpiresDays, setOfferExpiresDays] = useState('7');
 
     const load = async () => {
         if (!contractAddr) return;
@@ -81,6 +107,7 @@ export default function Loan() {
             setNewDuration(String(Math.floor(data.loanParams.duration / 86400)));
             setNewInterest(pct.toFixed(2));
             fetchNftMeta(data.nftAddress.toString());
+            refreshLoan(network, contractAddr).catch(console.error);
         } catch {
             setError('Failed to load contract data. Make sure the address is correct.');
         } finally {
@@ -88,23 +115,120 @@ export default function Loan() {
         }
     };
 
+    const loadOffers = async () => {
+        if (!contractAddr) return;
+        const refreshed = await getOffers({ network, loanAddress: contractAddr }).catch(() => ({ offers: [] }));
+        setOffers(refreshed.offers);
+        if (!walletAddress) {
+            setBankBalance(null);
+            return;
+        }
+        const bankAddress = bank.getBankAddress(walletAddress).toString();
+        try {
+            setBankBalance(await bank.getBankBalance(bankAddress));
+            await refreshBank(network, bankAddress);
+            setOffers((await getOffers({ network, loanAddress: contractAddr })).offers);
+        } catch {
+            setOffers(refreshed.offers);
+        }
+    };
+
     const fetchNftMeta = async (nftAddr: string) => {
         try {
-            const res = await fetch(`${config.tonapiUrl}/v2/nfts/${nftAddr}`);
+            const res = await fetch(`${config.tonapiUrl}/nfts/${nftAddr}`);
             if (!res.ok) return;
             const d = await res.json();
             setNftMeta({
                 name: d.metadata?.name || `NFT #${d.index ?? '?'}`,
                 image:
-                    d.previews?.find((p: any) => p.resolution === '500x500')?.url ||
+                    d.previews?.find((p: TonApiPreview) => p.resolution === '500x500')?.url ||
                     d.previews?.[0]?.url ||
                     d.metadata?.image,
                 collection: d.collection?.name,
             });
-        } catch {}
+        } catch {
+            return;
+        }
     };
 
     useEffect(() => { load(); }, [contractAddr]);
+    useEffect(() => {
+        loadOffers();
+    }, [contractAddr, walletAddress, network]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!contractAddr || offers.length === 0) {
+            setOfferFundingStatuses({});
+            return;
+        }
+
+        setOfferFundingStatuses(Object.fromEntries(
+            offers.map((offer) => [offer.id, { checking: true, fundable: false, reason: 'Checking bank funds on-chain...' }]),
+        ));
+
+        const sameOfferTerms = (chainOffer: {
+            loanParams: {
+                amount: bigint;
+                duration: number;
+                interestPerDay: { nominator: number; denominator: number };
+            };
+            expirationDate: bigint;
+            jettonWallet: Address | null;
+        }, stored: StoredBankOffer) => (
+            chainOffer.loanParams.amount === BigInt(stored.amount) &&
+            chainOffer.loanParams.duration === stored.duration &&
+            chainOffer.loanParams.interestPerDay.nominator === stored.interestNominator &&
+            chainOffer.loanParams.interestPerDay.denominator === stored.interestDenominator &&
+            chainOffer.expirationDate === BigInt(stored.expirationDate) &&
+            (chainOffer.jettonWallet?.toString() ?? null) === stored.jettonWallet
+        );
+
+        const verifyOffer = async (offer: StoredBankOffer): Promise<[string, OfferFundingStatus]> => {
+            try {
+                const bankData = await bank.getData(offer.bankAddress);
+                const chainOffer = bankData.offers.get(Address.parse(contractAddr));
+                if (!chainOffer) {
+                    return [offer.id, { checking: false, fundable: false, reason: 'Offer is no longer present in this bank contract.' }];
+                }
+                if (!sameOfferTerms(chainOffer, offer)) {
+                    return [offer.id, { checking: false, fundable: false, reason: 'Indexed offer does not match the current bank contract offer.' }];
+                }
+                if (BigInt(Math.floor(Date.now() / 1000)) >= chainOffer.expirationDate) {
+                    return [offer.id, { checking: false, fundable: false, reason: 'Offer is expired on-chain.' }];
+                }
+
+                const bankTonBalance = await bank.getBankBalance(offer.bankAddress);
+                if (chainOffer.jettonWallet) {
+                    const jettonBalance = await bank.getJettonWalletBalance(chainOffer.jettonWallet.toString());
+                    if (jettonBalance < chainOffer.loanParams.amount) {
+                        return [offer.id, { checking: false, fundable: false, reason: 'Bank jetton wallet balance is below the offered amount.' }];
+                    }
+                    if (bankTonBalance < JETTON_OFFER_GAS_RESERVE) {
+                        return [offer.id, { checking: false, fundable: false, reason: `Bank needs at least ${fromNano(JETTON_OFFER_GAS_RESERVE)} TON for jetton transfer gas.` }];
+                    }
+                    return [offer.id, { checking: false, fundable: true, reason: 'Bank jetton and gas balances are sufficient.' }];
+                }
+
+                const requiredTon = chainOffer.loanParams.amount + TON_OFFER_GAS_RESERVE;
+                if (bankTonBalance < requiredTon) {
+                    return [offer.id, { checking: false, fundable: false, reason: `Bank needs ${fromNano(requiredTon)} TON including funding gas.` }];
+                }
+                return [offer.id, { checking: false, fundable: true, reason: 'Bank TON balance is sufficient.' }];
+            } catch (error) {
+                console.error(error);
+                return [offer.id, { checking: false, fundable: false, reason: 'Could not verify this offer from blockchain.' }];
+            }
+        };
+
+        Promise.all(offers.map(verifyOffer)).then((entries) => {
+            if (!cancelled) setOfferFundingStatuses(Object.fromEntries(entries));
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [offers, contractAddr]);
 
     // ── Computed ──────────────────────────────────────────────────────────────
 
@@ -153,7 +277,10 @@ export default function Loan() {
         setActionLoading(true);
         try {
             await action();
-            setTimeout(load, 3000);
+            setTimeout(() => {
+                load();
+                loadOffers();
+            }, 3000);
         } catch (e) {
             console.error(e);
             alert('Transaction failed');
@@ -164,6 +291,16 @@ export default function Loan() {
 
     const onRepay = () => handleAction(() => sendRepayLoan(contractAddr!, totalRepayment));
     const onFund = () => handleAction(() => sendGiveLoan(contractAddr!, loanInfo!.loanParams));
+    const onAcceptOffer = (offer: StoredBankOffer) =>
+        handleAction(async () => {
+            const status = offerFundingStatuses[offer.id];
+            if (status && !status.fundable) {
+                alert(status.reason);
+                return;
+            }
+            await sendAcceptOffer(contractAddr!, offer.bankAddress, loanParamsFromStoredOffer(offer));
+            setTimeout(() => refreshBank(network, offer.bankAddress).then(loadOffers).catch(console.error), 3000);
+        });
     const onCancel = () => handleAction(() => sendCancelBeforeStart(contractAddr!));
     const onWithdrawNft = () => handleAction(() => sendWithdrawNftNotRepaid(contractAddr!));
     const onChangeParams = () =>
@@ -174,6 +311,25 @@ export default function Loan() {
                 amount: toNano(newAmount),
             });
             setShowChangeParams(false);
+        });
+    const onCreateOffer = () =>
+        handleAction(async () => {
+            if (!walletAddress || !contractAddr) return;
+            const bankAddress = bank.getBankAddress(walletAddress).toString();
+            const loanParams = {
+                duration: parseInt(offerDuration) * 86400,
+                interestPerDay: percentToDecimal(offerInterest),
+                amount: toNano(offerAmount),
+            };
+            const expirationDate = BigInt(Math.floor(Date.now() / 1000) + parseInt(offerExpiresDays) * 86400);
+            await bank.sendAddOffer(walletAddress, contractAddr, loanParams, expirationDate);
+            setTimeout(() => refreshBank(network, bankAddress).then(loadOffers).catch(console.error), 3000);
+        });
+    const onRemoveOffer = (offer: StoredBankOffer) =>
+        handleAction(async () => {
+            if (!walletAddress || !contractAddr) return;
+            await bank.sendRemoveOffer(walletAddress, contractAddr);
+            setTimeout(() => refreshBank(network, offer.bankAddress).then(loadOffers).catch(console.error), 3000);
         });
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -355,8 +511,178 @@ export default function Loan() {
                         onWithdrawNft={onWithdrawNft}
                         onChangeParams={onChangeParams}
                     />
+
+                    <OffersCard
+                        offers={offers}
+                        status={status}
+                        walletAddress={walletAddress}
+                        currentBankAddress={walletAddress ? bank.getBankAddress(walletAddress).toString() : ''}
+                        bankBalance={bankBalance}
+                        fundingStatuses={offerFundingStatuses}
+                        isBorrower={isBorrower}
+                        actionLoading={actionLoading}
+                        offerAmount={offerAmount}
+                        offerDuration={offerDuration}
+                        offerInterest={offerInterest}
+                        offerExpiresDays={offerExpiresDays}
+                        setOfferAmount={setOfferAmount}
+                        setOfferDuration={setOfferDuration}
+                        setOfferInterest={setOfferInterest}
+                        setOfferExpiresDays={setOfferExpiresDays}
+                        onCreateOffer={onCreateOffer}
+                        onRemoveOffer={onRemoveOffer}
+                        onAcceptOffer={onAcceptOffer}
+                    />
                 </div>
             </div>
+        </div>
+    );
+}
+
+type OffersProps = {
+    offers: StoredBankOffer[];
+    status: LoanStatus;
+    walletAddress: string;
+    currentBankAddress: string;
+    bankBalance: bigint | null;
+    fundingStatuses: Record<string, OfferFundingStatus>;
+    isBorrower: boolean;
+    actionLoading: boolean;
+    offerAmount: string;
+    offerDuration: string;
+    offerInterest: string;
+    offerExpiresDays: string;
+    setOfferAmount: (v: string) => void;
+    setOfferDuration: (v: string) => void;
+    setOfferInterest: (v: string) => void;
+    setOfferExpiresDays: (v: string) => void;
+    onCreateOffer: () => void;
+    onRemoveOffer: (offer: StoredBankOffer) => void;
+    onAcceptOffer: (offer: StoredBankOffer) => void;
+};
+
+function OffersCard(p: OffersProps) {
+    const inputCls =
+        'w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)]';
+
+    return (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 space-y-5">
+            <div>
+                <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">Bank offers</h3>
+                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                    Offers are refreshed from bank contracts and cached by the backend.
+                </p>
+            </div>
+
+            <div className="space-y-3">
+                {p.offers.length === 0 && (
+                    <div className="border border-[var(--color-border)] bg-[var(--color-bg)] rounded-lg p-4 text-sm text-[var(--color-text-secondary)]">
+                        No bank offers have been indexed for this loan yet.
+                    </div>
+                )}
+                {p.offers.map((offer) => {
+                    const isOwnOffer = offer.bankAddress === p.currentBankAddress;
+                    const fundingStatus = p.fundingStatuses[offer.id];
+                    const isFundable = fundingStatus?.fundable === true;
+                    const isUnderfunded = fundingStatus && !fundingStatus.checking && !fundingStatus.fundable;
+                    const amount = `${fromNano(BigInt(offer.amount))} TON`;
+                    const duration = Math.floor(offer.duration / 86400);
+                    const rate = ((offer.interestNominator / offer.interestDenominator) * 100).toFixed(2);
+                    const expires = new Date(Number(BigInt(offer.expirationDate)) * 1000).toLocaleDateString();
+                    return (
+                        <div
+                            key={offer.id}
+                            className={`border rounded-lg p-4 ${
+                                isUnderfunded
+                                    ? 'border-red-500/40 bg-red-500/10'
+                                    : 'border-green-500/30 bg-green-500/10'
+                            }`}
+                        >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-medium text-white">{amount}</p>
+                                        {isOwnOffer && <span className="px-2 py-0.5 rounded-full bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs">Your bank</span>}
+                                    </div>
+                                    <p className="text-xs text-[var(--color-text-secondary)] font-mono truncate">{offer.bankAddress}</p>
+                                    <p className="text-xs text-[var(--color-text-secondary)]">Expires {expires}</p>
+                                    {fundingStatus && (
+                                        <p className={`text-xs mt-1 ${isUnderfunded ? 'text-red-300' : isFundable ? 'text-green-300' : 'text-[var(--color-text-secondary)]'}`}>
+                                            {fundingStatus.reason}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="text-sm text-[var(--color-text-secondary)] sm:text-right">
+                                    <p>{duration} days</p>
+                                    <p>{rate}% / day</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    {p.isBorrower && p.status === LoanStatus.WAITING_FOR_FUNDS && (
+                                        <button
+                                            onClick={() => p.onAcceptOffer(offer)}
+                                            disabled={p.actionLoading || !isFundable}
+                                            className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 text-white rounded-lg text-sm font-semibold cursor-pointer"
+                                        >
+                                            {fundingStatus?.checking ? 'Checking...' : 'Accept'}
+                                        </button>
+                                    )}
+                                    {isOwnOffer && (
+                                        <button
+                                            onClick={() => p.onRemoveOffer(offer)}
+                                            disabled={p.actionLoading}
+                                            className="px-4 py-2 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 text-red-300 rounded-lg text-sm font-semibold cursor-pointer"
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {!p.isBorrower && p.walletAddress && p.status === LoanStatus.WAITING_FOR_FUNDS && (
+                <form
+                    className="border-t border-[var(--color-border)] pt-5 space-y-4"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        p.onCreateOffer();
+                    }}
+                >
+                    <div className="flex flex-col gap-1">
+                        <h4 className="font-semibold">Create offer from your bank</h4>
+                        <p className="text-xs text-[var(--color-text-secondary)] font-mono break-all">{p.currentBankAddress}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">
+                            Bank balance: {p.bankBalance === null ? '...' : `${fromNano(p.bankBalance)} TON`}
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Amount (TON)</label>
+                            <input type="number" min="0.01" step="0.01" required value={p.offerAmount} onChange={(e) => p.setOfferAmount(e.target.value)} className={inputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Duration (days)</label>
+                            <input type="number" min="1" required value={p.offerDuration} onChange={(e) => p.setOfferDuration(e.target.value)} className={inputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Interest (% / day)</label>
+                            <input type="number" min="0.01" step="0.01" required value={p.offerInterest} onChange={(e) => p.setOfferInterest(e.target.value)} className={inputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-[var(--color-text-secondary)] mb-1">Expires in days</label>
+                            <input type="number" min="1" required value={p.offerExpiresDays} onChange={(e) => p.setOfferExpiresDays(e.target.value)} className={inputCls} />
+                        </div>
+                    </div>
+                    <button
+                        disabled={p.actionLoading || !p.offerAmount}
+                        className="w-full py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 text-white rounded-lg font-semibold transition-colors cursor-pointer"
+                    >
+                        {p.actionLoading ? 'Sending...' : 'Create Bank Offer'}
+                    </button>
+                </form>
+            )}
         </div>
     );
 }

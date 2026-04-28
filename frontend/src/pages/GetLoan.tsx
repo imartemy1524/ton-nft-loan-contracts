@@ -5,14 +5,17 @@ import { Address, toNano } from '@ton/core';
 import { useMainContract } from '../hooks/useMainContract';
 import { useTonNfts, NftItem } from '../hooks/useTonNfts';
 import { percentToDecimal } from '../utils/percentToDecimal';
-import { JETTONS, JettonInfo } from '../constants/jettons';
+import { JETTONS } from '../constants/jettons';
 import { useTokenPrices } from '../hooks/useTokenPrices';
+import { refreshLoan } from '../api';
+import { useNetwork } from '../network';
 
 export default function GetLoan() {
     const navigate = useNavigate();
     const walletAddress = useTonAddress();
     const { deployLoanContract } = useMainContract();
     const { nfts, loading: nftsLoading, error: nftsError } = useTonNfts();
+    const { network } = useNetwork();
 
     const [selectedNft, setSelectedNft] = useState<NftItem | null>(null);
     const [amount, setAmount] = useState('');
@@ -40,6 +43,7 @@ export default function GetLoan() {
                 },
                 parsedJetton,
             );
+            refreshLoan(network, contractAddr.toString()).catch(console.error);
             navigate(`/loan/${contractAddr.toString()}`);
         } catch (err) {
             console.error(err);

@@ -12,15 +12,17 @@ interface NetworkConfig {
 
 function getConfig(network: Network): NetworkConfig {
     const isTestnet = network === 'testnet';
+    const tonapiUrl = (isTestnet
+        ? import.meta.env.VITE_TONAPI_TESTNET_URL
+        : import.meta.env.VITE_TONAPI_MAINNET_URL)
+        .replace(/\/$/, '');
     return {
         network,
         toncenterUrl: isTestnet
             ? import.meta.env.VITE_TONCENTER_TESTNET_URL
             : import.meta.env.VITE_TONCENTER_MAINNET_URL,
         toncenterApiKey: import.meta.env.VITE_TONCENTER_API_KEY,
-        tonapiUrl: isTestnet
-            ? import.meta.env.VITE_TONAPI_TESTNET_URL
-            : import.meta.env.VITE_TONAPI_MAINNET_URL,
+        tonapiUrl,
         manifestUrl: import.meta.env.VITE_TONCONNECT_MANIFEST_URL,
     };
 }
@@ -64,6 +66,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useNetwork() {
     return useContext(NetworkContext);
 }
