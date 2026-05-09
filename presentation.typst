@@ -1,0 +1,474 @@
+// ─── Page setup ───────────────────────────────────────────────────────────────
+#set page(width: 297mm, height: 167mm, margin: 0pt, fill: rgb("#0d1117"))
+#set text(font: ("Helvetica Neue", "Arial", "Helvetica"), fill: white, size: 15pt)
+#show heading: set text(fill: white)
+
+// ─── Colors ───────────────────────────────────────────────────────────────────
+#let bg     = rgb("#0d1117")
+#let panel  = rgb("#161b22")
+#let border = rgb("#30363d")
+#let blue   = rgb("#0088CC")
+#let accent = rgb("#00c8ff")
+#let green  = rgb("#00c896")
+#let yellow = rgb("#f59e0b")
+#let muted  = rgb("#8b949e")
+#let red    = rgb("#ef4444")
+#let hdr    = rgb("#1c2128")
+
+// ─── Components ───────────────────────────────────────────────────────────────
+#let badge(t, color: blue) = box(
+  fill: color.lighten(80%), stroke: 1pt + color,
+  inset: (x: 6pt, y: 3pt), radius: 4pt,
+)[#set text(fill: color, size: 12pt, weight: "bold"); #t]
+
+#let card(body, accent: blue, title: none) = block(
+  fill: panel, stroke: (left: 3pt + accent, rest: 1pt + border),
+  inset: (x: 14pt, y: 10pt), radius: 6pt, width: 100%,
+)[
+  #if title != none { text(fill: accent, weight: "bold", size: 14pt, title); v(5pt) }
+  #set text(size: 13pt); #body
+]
+
+#let chip(t, color: blue) = box(
+  fill: color.darken(50%), stroke: 1pt + color,
+  inset: (x: 7pt, y: 4pt), radius: 3pt,
+)[#set text(fill: color.lighten(30%), size: 11pt, font: ("Courier New","Courier")); #t]
+
+#let mono(t) = text(font: ("Courier New","Courier"), size: 12pt, fill: accent, t)
+
+#let num-circle(n, color) = circle(radius: 8pt, fill: color)[
+  #set align(center + horizon)
+  #text(fill: white, size: 11pt, weight: "bold", str(n))
+]
+
+#let step(n, color, body) = {
+  grid(columns: (22pt, 1fr), gutter: 6pt,
+    align(center + top, num-circle(n, color)),
+    pad(top: 1pt)[#set text(size: 12.5pt); #body],
+  )
+  v(5pt)
+}
+
+// ─── Slide template ───────────────────────────────────────────────────────────
+#let slide(title, body) = {
+  block(width: 100%, height: 100%, fill: bg)[
+    #block(width: 100%, fill: hdr, inset: (x: 24pt, y: 9pt),
+           stroke: (bottom: 2pt + blue))[
+      #grid(columns: (1fr, auto),
+        text(size: 17pt, weight: "bold", title),
+        text(size: 12pt, fill: muted, "TON NFT Loans"),
+      )
+    ]
+    #pad(x: 24pt, y: 12pt, body)
+  ]
+  pagebreak(weak: true)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 1 — TITLE
+// ══════════════════════════════════════════════════════════════════════════════
+#block(width: 100%, height: 100%, fill: bg)[
+  #place(top + left, block(width: 100%, height: 5pt,
+    fill: gradient.linear(blue, accent, angle: 0deg)))
+  #align(center + horizon)[
+    #text(size: 44pt, weight: "black", "TON NFT Loans")
+    #v(6pt)
+    #text(size: 17pt, fill: accent,
+      "Decentralized peer-to-peer NFT-backed lending on TON blockchain")
+    #v(16pt)
+    #grid(columns: (auto, auto, auto), gutter: 10pt,
+      badge("Trustless", color: green),
+      badge("Permissionless", color: blue),
+      badge("On-chain", color: yellow),
+    )
+    #v(20pt)
+    #grid(columns: (auto, auto, auto), gutter: 24pt,
+      align(center)[
+        #text(size: 20pt, weight: "bold", fill: green, "TON · USDT · NOT")
+        #linebreak()
+        #text(size: 12pt, fill: muted, "Loan tokens")
+      ],
+      align(center)[
+        #text(size: 20pt, weight: "bold", fill: blue, "~831 lines")
+        #linebreak()
+        #text(size: 12pt, fill: muted, "Smart contract code")
+      ],
+      align(center)[
+        #text(size: 20pt, weight: "bold", fill: yellow, "Mainnet live")
+        #linebreak()
+        #text(size: 12pt, fill: muted, "ton-nft-loan-app.vercel.app")
+      ],
+    )
+  ]
+]
+#pagebreak()
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 2 — PROBLEM & ICP
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Problem & ICP")[
+  #grid(columns: (1fr, 1fr), gutter: 14pt,
+    [
+      #card(accent: red, title: "The Problem")[
+        NFT holders need liquidity *without selling* assets. TON had no trustless, native lending market.
+        #v(6pt)
+        - Manual OTC deals carry counterparty risk
+        - Centralized platforms hold custody — insolvency risk
+        - No fixed-yield instrument for TON lenders
+        - Current "solutions": selling the asset or going to a CeFi platform
+      ]
+      #v(10pt)
+      #card(accent: yellow, title: "Why now?")[
+        #set text(size: 12.5pt)
+        TON ecosystem is exploding (Telegram mini-apps, \$3B+ TVL). NFT volumes on Getgems are growing. No native trustless lending protocol exists — the gap is wide open.
+      ]
+    ],
+    [
+      #card(accent: blue, title: "ICP — Borrower")[
+        #set text(size: 12.5pt)
+        TON NFT collector with assets in top Getgems collections.\
+        *Pain:* needs liquidity for new mints or trading without selling. Already losing opportunity cost daily.
+        #v(4pt)
+        *Signal:* "I'd rather pay 20% APR than lose my Notcoin OG."
+      ]
+      #v(10pt)
+      #card(accent: green, title: "ICP — Lender")[
+        #set text(size: 12.5pt)
+        TON holder seeking fixed yield above staking rates.\
+        *Pain:* DeFi options on TON are limited or opaque. Wants on-chain, auditable, non-custodial returns.
+        #v(4pt)
+        *Signal:* "Show me the contract address, I'll fund it myself."
+      ]
+      #v(10pt)
+      #card(accent: muted)[
+        #set text(size: 12pt)
+        *Early adopter test passed:* Real TON users are funding loans on mainnet today without prompting.
+      ]
+    ],
+  )
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 3 — SOLUTION & UVP
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Solution & Unique Value Proposition")[
+  #grid(columns: (1.1fr, 0.9fr), gutter: 14pt,
+    [
+      #card(accent: green, title: "Solution — How It Works")[
+        #step(1, blue,   "Borrower selects NFT · sets amount / duration / interest / token")
+        #step(2, blue,   "Loan smart contract deployed — NFT locked inside on-chain")
+        #step(3, green,  "Lender funds directly via TonConnect → loan activates instantly")
+        #step(4, green,  "Borrower repays principal + interest → NFT auto-returned")
+        #step(5, yellow, [*Offer mode:* lender pre-creates terms stored on-chain. Borrower accepts atomically — lender doesn't need to be online])
+        #step(6, red,    "Borrower defaults → lender withdraws NFT collateral after deadline")
+      ]
+    ],
+    [
+      #block(fill: gradient.linear(blue.darken(70%), accent.darken(60%), angle: 30deg),
+             stroke: 1pt + blue, inset: (x: 14pt, y: 12pt), radius: 8pt, width: 100%)[
+        #text(size: 13pt, fill: accent, weight: "bold", "One-liner")
+        #v(6pt)
+        #set text(size: 13pt)
+        A trustless lending protocol for TON NFT holders — borrow against your NFT in minutes, lend at fixed rates, everything enforced by smart contracts.
+      ]
+      #v(10pt)
+      #card(accent: accent, title: "UVP")[
+        #set text(size: 12.5pt)
+        We help TON NFT holders unlock liquidity *without selling*, and lenders earn fixed yield — with *zero custody risk* and *no intermediaries*.
+      ]
+      #v(10pt)
+      #card(accent: yellow, title: "vs. Alternatives")[
+        #set text(size: 12pt)
+        - *OTC deals:* counterparty risk, no enforcement
+        - *CeFi lending:* custody, insolvency, KYC
+        - *Selling NFT:* loses asset permanently
+        - *Doing nothing:* loses opportunity cost
+      ]
+    ],
+  )
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 4 — PRODUCT: FRONTEND
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Product — Frontend")[
+  #grid(columns: (1fr, 1fr), gutter: 14pt,
+    [
+      #text(size: 13pt, weight: "bold", fill: blue, "Stack")
+      #v(5pt)
+      #block(fill: panel, stroke: 1pt + border, inset: (x:10pt, y:8pt), radius:4pt, width:100%)[
+        #set text(size: 12.5pt)
+        #grid(columns: (1fr, 1fr), gutter: 4pt,
+          "React 19 · TypeScript", "Vite · TailwindCSS 4.1",
+          "React Router 7", [#raw("@ton/ton") · #raw("@ton/core")],
+          [TonConnect UI 2.0], "TonAPI · CoinGecko",
+        )
+      ]
+      #v(10pt)
+      #text(size: 13pt, weight: "bold", fill: accent, "TonConnect Integration")
+      #v(5pt)
+      #block(fill: panel, stroke: 1pt + border, inset:(x:10pt,y:9pt), radius:4pt, width:100%)[
+        #set text(size: 12.5pt)
+        Wallet connect via #raw("@tonconnect/ui-react") 2.0. Transaction payloads built with #raw("@ton/core") Cell builders — typed, serialized, sent directly to the TON network. Supports Tonkeeper, MyTonWallet, and all TonConnect-compatible wallets.
+      ]
+    ],
+    [
+      #text(size: 13pt, weight: "bold", fill: blue, "Pages")
+      #v(5pt)
+      #block(fill: panel, stroke: 1pt + border, inset: 0pt, radius:4pt,
+             width:100%, clip:true)[
+        #let pg(name, desc) = block(width:100%, stroke:(bottom:1pt+border),
+                                    inset:(x:10pt, y:7pt))[
+          #grid(columns:(auto,1fr), gutter:10pt,
+            text(fill:accent, size:12pt, weight:"bold", name),
+            text(fill:muted,  size:12pt, desc),
+          )
+        ]
+        #pg("Home",     "Hero, live stats, call-to-actions")
+        #pg("GetLoan",  "NFT picker + loan creation form")
+        #pg("GiveLoan", "Filtered loan browser for lenders")
+        #pg("Loan",     "Detail: params, repayment calc, actions, offers")
+        #block(width:100%, inset:(x:10pt,y:7pt))[
+          #grid(columns:(auto,1fr), gutter:10pt,
+            text(fill:accent, size:12pt, weight:"bold", "Profile"),
+            text(fill:muted,  size:12pt, "Active loans, Bank dashboard, offers"),
+          )
+        ]
+      ]
+    ],
+  )
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 5 — PRODUCT: BACKEND & CONTRACTS
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Product — Backend & Smart Contracts")[
+  #grid(columns: (1fr, 1fr), gutter: 14pt,
+    [
+      #text(size: 13pt, weight: "bold", fill: yellow, "Backend Indexer (Node.js 20 + Express 5)")
+      #v(6pt)
+      #let module(name, desc) = {
+        block(fill: panel, stroke: (left: 2pt + yellow, rest: 1pt + border),
+              inset: (x: 10pt, y: 6pt), radius: 4pt, width: 100%)[
+          #mono(name)
+          #linebreak()
+          #text(fill: muted, size: 11pt, desc)
+        ]
+        v(4pt)
+      }
+      #module("refresh.ts", "refreshLoan() / refreshBank() — reads on-chain state, upserts PostgreSQL. Triggered by frontend on stale detection")
+      #module("chain.ts",   "getLoanData(addr) → LoanConfig · getBankData(addr) → BankState · getNftMeta(addr) via TonAPI")
+      #module("token-cache.ts", "resolveTokenWallet(jettonAddr) — verifies on-chain jetton master, USDT-specific fallback, caches results in DB")
+      #v(4pt)
+      #block(fill: panel, stroke: 1pt + border, inset: (x:10pt, y:8pt), radius:4pt, width:100%)[
+        #set text(size: 12pt)
+        *PostgreSQL schema:* `loans` (address, borrower, lender, nft, amount, status, network) · `offers` (bank, loan, amount, duration, interest, expiry) · `token_wallets` (cache)
+        #linebreak()
+        *REST:* #mono("GET /api/loans") · #mono("GET /api/offers") · #mono("GET /api/stats") · #mono("POST /api/refresh/:type")
+      ]
+    ],
+    [
+      #text(size: 13pt, weight: "bold", fill: green, "Smart Contracts (Tolk)")
+      #v(6pt)
+      #block(fill: rgb("#010409"), stroke: 1pt + border,
+             inset: 11pt, radius: 5pt, width: 100%)[
+        #set text(font: ("Courier New","Courier"), size: 11.5pt, fill: rgb("#e6edf3"))
+        #text(fill: muted, "// Main contract state machine")
+        #linebreak()
+        NOT_INIT
+        #linebreak()
+        #h(0.8em) #text(fill: yellow, "↓") OP_DEPLOY #sym.arrow #text(fill: accent, "WAITING_FOR_FUNDS")
+        #linebreak()
+        #h(0.8em) #text(fill: yellow, "↓") OP_GIVE_MONEY #sym.arrow #text(fill: accent, "IN_PROGRESS")
+        #linebreak()
+        #h(0.8em) #text(fill: yellow, "↓") OP_REPAY_LOAN #sym.arrow #text(fill: green, "REPAYED")
+        #linebreak()
+        #h(0.8em) #text(fill: yellow, "↓") deadline #sym.arrow #text(fill: red, "NOT_REPAYED")
+        #linebreak()
+        #h(0.8em) #text(fill: yellow, "↓") OP_CANCEL #sym.arrow #text(fill: muted, "CANCELLED")
+      ]
+      #v(6pt)
+      #block(fill: panel, stroke: 1pt + border, inset:(x:10pt, y:8pt), radius:4pt, width:100%)[
+        #set text(size: 12pt)
+        *Bank contract (207 ln):* lender's non-custodial on-chain wallet. Offers stored as `dict<loanAddr, LoanParams>`. Atomic fund transfer on `OP_ACCEPT_OFFER`. #linebreak()
+        *Wrappers:* TypeScript Blueprint wrappers for each contract — used by both frontend hooks and backend indexer.
+      ]
+      #v(4pt)
+      #grid(columns: (1fr, 1fr, 1fr), gutter: 6pt,
+        block(fill: green.darken(60%), stroke:1pt+green, inset:(x:6pt,y:4pt), radius:3pt,
+          text(size:11pt, fill:green, "263 ln\nMain")),
+        block(fill: blue.darken(60%), stroke:1pt+blue, inset:(x:6pt,y:4pt), radius:3pt,
+          text(size:11pt, fill:blue, "207 ln\nBank")),
+        block(fill: yellow.darken(60%), stroke:1pt+yellow, inset:(x:6pt,y:4pt), radius:3pt,
+          text(size:11pt, fill:yellow, "33 unit\ntests ✓")),
+      )
+    ],
+  )
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 6 — BUSINESS MODEL & ECONOMICS
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Business Model & Economics")[
+  #grid(columns: (1fr, 1fr), gutter: 14pt,
+    [
+      #card(accent: blue, title: "Revenue Model — Take-Rate (Transaction Fee)")[
+        #set text(size: 12.5pt)
+        Protocol collects a *small fee from loan interest* on every completed repayment. Fee enforced at the smart contract level — no trust required.
+        #v(6pt)
+        - *Borrower pays:* principal + agreed interest rate
+        - *Protocol takes:* e.g. 10% of interest earned
+        - *Lender receives:* 90% of agreed interest
+        - *No subscription, no seat pricing* — pure usage-based
+        #v(6pt)
+        #text(size: 12pt, fill: muted,
+          "Similar to Uniswap / NFTfi model: every transaction generates protocol revenue automatically.")
+      ]
+      #v(10pt)
+      #card(accent: yellow, title: "Cost Structure")[
+        #set text(size: 12pt)
+        - *Smart contracts:* gas fees paid by users (not protocol)
+        - *Backend:* Vercel hosting + PostgreSQL managed DB
+        - *Toncenter RPC / TonAPI:* indexed chain access
+        - *Frontend CDN:* Vercel static serving
+        #v(4pt)
+        *Gross margin is very high* — protocol has no COGS per loan. Infrastructure scales cheaply.
+      ]
+    ],
+    [
+      #card(accent: green, title: "Unit Economics per Loan")[
+        #set text(size: 12.5pt)
+        #grid(columns: (1fr, auto), gutter: 4pt,
+          text("Example loan"), text(""),
+          text(fill: muted, "Principal"), text(fill: white, "1000 TON"),
+          text(fill: muted, "Duration"),  text(fill: white, "30 days"),
+          text(fill: muted, "Interest rate (agreed)"), text(fill: white, "15% APR"),
+          text(fill: muted, "Interest earned"), text(fill: white, "~12.3 TON"),
+          text(fill: muted, "Protocol fee (10%)"), text(fill: green, "~1.23 TON"),
+        )
+        #v(6pt)
+        Revenue scales automatically with loan volume. Zero marginal cost per additional loan.
+      ]
+      #v(10pt)
+      #card(accent: accent, title: "Moat & Retention")[
+        #set text(size: 12pt)
+        - Trustless contracts: no platform risk for repeat users
+        - Bank contract: lenders' funds are already on-chain → repeat lending is 1 click
+        - NFT collateral history builds protocol reputation → organic word-of-mouth
+        - Flywheel: more lenders → better liquidity → more borrowers → more fees
+      ]
+    ],
+  )
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 7 — MARKET & COMPETITION
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Market & Competition")[
+  #grid(columns: (1.1fr, 0.9fr), gutter: 14pt,
+    [
+      #text(size: 13pt, weight: "bold", "Market Size")
+      #v(6pt)
+      #let mrow(label, val, pct, color) = {
+        block(fill: panel, stroke: (left: 4pt + color, rest: 1pt + border),
+              inset: (x: 12pt, y: 8pt), radius: 4pt, width: 100%)[
+          #grid(columns: (auto, 1fr, auto),
+            text(fill: color, weight: "bold", size: 13pt, label),
+            h(1fr),
+            text(fill: color, weight: "bold", size: 13pt, val),
+          )
+          #linebreak()
+          #text(fill: muted, size: 11pt, pct)
+        ]
+        v(5pt)
+      }
+      #mrow("TAM", "\$2B+", "Global NFT-backed lending market (NFTfi, Arcade, Blend)", blue)
+      #mrow("SAM", "\$200M+", "TON ecosystem NFT market (Getgems volume, active collectors)", accent)
+      #mrow("SOM", "\$5–20M", "Reachable Y1: top TON collections, early DeFi users", green)
+      #v(4pt)
+      #text(size: 11pt, fill: muted,
+        "Bottom-up: ~5,000 active NFT holders on TON × avg loan size \$1,000 × 4 loans/year × 1% take-rate = \$200K ARR at 1% penetration")
+    ],
+    [
+      #text(size: 13pt, weight: "bold", "Competitive Landscape")
+      #v(6pt)
+      #let cmp(name, score, note) = {
+        block(fill: panel, stroke: 1pt + border,
+              inset: (x: 10pt, y: 7pt), radius: 4pt, width: 100%)[
+          #grid(columns: (1fr, auto),
+            text(size: 12.5pt, weight: "bold", name),
+            text(fill: score, size: 11pt, weight: "bold",
+              if score == green { "✓ us" } else { "risk" }),
+          )
+          #linebreak()
+          #text(fill: muted, size: 11pt, note)
+        ]
+        v(4pt)
+      }
+      #cmp("OTC / manual deals", red, "Counterparty risk, no enforcement, slow settlement")
+      #cmp("CeFi lending (centralized)", red, "Custody risk, KYC, not native TON")
+      #cmp("NFTfi / Arcade (ETH)", yellow, "Ethereum only, different ecosystem, no TON")
+      #cmp("TON NFT Loans (us)", green, "Trustless, native TON, multi-token, offer system")
+      #v(6pt)
+      #text(size: 12pt, fill: muted,
+        "No direct on-chain NFT lending protocol on TON exists today. First-mover advantage is significant in DeFi — liquidity begets liquidity.")
+    ],
+  )
+]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SLIDE 8 — TRACTION & ASK
+// ══════════════════════════════════════════════════════════════════════════════
+#slide("Traction & Status")[
+  #grid(columns: (1fr, 1fr), gutter: 14pt,
+    [
+      #text(size: 13pt, weight: "bold", "What's been proven")
+      #v(6pt)
+      #let proved(body) = {
+        block(fill: panel, stroke: (left: 3pt + green), inset: (x:10pt,y:7pt),
+              radius: 4pt, width: 100%)[
+          #text(fill: green, "✓ ")#text(size: 12.5pt, body)
+        ]
+        v(4pt)
+      }
+      #proved("Smart contracts live on TON Mainnet + Testnet")
+      #proved("Frontend deployed on Vercel — usable today via TonConnect")
+      #proved("Backend indexer running with PostgreSQL on Vercel")
+      #proved("Full borrower & lender flows tested end-to-end on mainnet")
+      #proved("33 automated unit tests passing (financial math, token resolution)")
+      #proved("Multi-token loans: TON, USDT, NOT — all verified on-chain")
+      #proved("Offer system live — lenders can pre-create on-chain offers")
+    ],
+    [
+      #text(size: 13pt, weight: "bold", "Key Metrics")
+      #v(6pt)
+      #block(fill: panel, stroke: 1pt + border, inset:(x:14pt, y:10pt),
+             radius: 6pt, width: 100%)[
+        #let stat(label, value, color) = {
+          grid(columns: (1fr, auto),
+            text(size: 12pt, fill: muted, label),
+            text(size: 13pt, weight: "bold", fill: color, value),
+          )
+          v(5pt)
+        }
+        #stat("Smart contract code", "~831 lines Tolk", green)
+        #stat("Automated unit tests", "33 passing",      blue)
+        #stat("Loan tokens supported", "TON · USDT · NOT", yellow)
+        #stat("Networks",  "Mainnet + Testnet", accent)
+        #stat("Frontend pages", "5 (Home/GetLoan/GiveLoan/Loan/Profile)", muted)
+        #stat("Admin keys / custody", "None (trustless)", green)
+        #stat("Infrastructure cost/loan", "~\$0 marginal", green)
+      ]
+      #v(8pt)
+      #align(center)[
+        #block(
+          fill: gradient.linear(blue, accent, angle: 15deg),
+          inset: (x: 20pt, y: 9pt), radius: 8pt,
+        )[
+          #text(fill: white, weight: "bold", size: 15pt,
+            "First trustless NFT lending protocol on TON — live today")
+        ]
+      ]
+    ],
+  )
+]
