@@ -420,54 +420,72 @@
 // SLIDE 8 — TRACTION & ASK
 // ══════════════════════════════════════════════════════════════════════════════
 #slide("Traction & Status")[
-  #grid(columns: (1fr, 1fr), gutter: 14pt,
+  #grid(columns: (1fr, 1.4fr, auto), gutter: 12pt,
+    // ── Col 1: proven + metrics ────────────────────────────────────────────
     [
-      #text(size: 13pt, weight: "bold", "What's been proven")
-      #v(6pt)
+      #text(size: 12.5pt, weight: "bold", "What's been proven")
+      #v(5pt)
       #let proved(body) = {
-        block(fill: panel, stroke: (left: 3pt + green), inset: (x:10pt,y:7pt),
+        block(fill: panel, stroke: (left: 3pt + green), inset: (x:9pt,y:5pt),
               radius: 4pt, width: 100%)[
-          #text(fill: green, "✓ ")#text(size: 12.5pt, body)
+          #text(fill: green, "✓ ")#text(size: 11.5pt, body)
         ]
-        v(4pt)
+        v(3pt)
       }
       #proved("Smart contracts live on TON Mainnet + Testnet")
-      #proved("Frontend deployed on Vercel — usable today via TonConnect")
-      #proved("Backend indexer running with PostgreSQL on Vercel")
-      #proved("Full borrower & lender flows tested end-to-end on mainnet")
-      #proved("33 automated unit tests passing (financial math, token resolution)")
-      #proved("Multi-token loans: TON, USDT, NOT — all verified on-chain")
-      #proved("Offer system live — lenders can pre-create on-chain offers")
-    ],
-    [
-      #text(size: 13pt, weight: "bold", "Key Metrics")
-      #v(6pt)
-      #block(fill: panel, stroke: 1pt + border, inset:(x:14pt, y:10pt),
-             radius: 6pt, width: 100%)[
-        #let stat(label, value, color) = {
-          grid(columns: (1fr, auto),
-            text(size: 12pt, fill: muted, label),
-            text(size: 13pt, weight: "bold", fill: color, value),
-          )
-          v(5pt)
-        }
-        #stat("Smart contract code", "~831 lines Tolk", green)
-        #stat("Automated unit tests", "33 passing",      blue)
-        #stat("Loan tokens supported", "TON · USDT · NOT", yellow)
-        #stat("Networks",  "Mainnet + Testnet", accent)
-        #stat("Frontend pages", "5 (Home/GetLoan/GiveLoan/Loan/Profile)", muted)
-        #stat("Admin keys / custody", "None (trustless)", green)
-        #stat("Infrastructure cost/loan", "~\$0 marginal", green)
-      ]
+      #proved("Frontend deployed — usable today via TonConnect")
+      #proved("Backend indexer + PostgreSQL on Vercel")
+      #proved("Borrower & lender flows tested on mainnet")
+      #proved("33 automated unit tests passing")
+      #proved("Offer system live — lenders pre-create offers")
       #v(8pt)
-      #align(center)[
-        #block(
-          fill: gradient.linear(blue, accent, angle: 15deg),
-          inset: (x: 20pt, y: 9pt), radius: 8pt,
-        )[
-          #text(fill: white, weight: "bold", size: 15pt,
-            "First trustless NFT lending protocol on TON — live today")
+      #block(fill: panel, stroke: (left: 3pt + green), inset:(x:10pt, y:8pt),
+             radius: 5pt, width: 100%)[
+        #text(size: 12pt, weight: "bold", fill: green, "Open Source")
+        #v(3pt)
+        #set text(size: 11pt)
+        Full codebase public on GitHub — *anyone can read and audit* every line of contract code. In blockchain, open source is the only proof of trustlessness.
+      ]
+    ],
+    // ── Col 2: real transaction screenshot + video preview ────────────────
+    [
+      #text(size: 12.5pt, weight: "bold", fill: yellow, "Real on-chain transactions")
+      #v(5pt)
+      #block(stroke: 1pt + border, radius: 5pt, clip: true, width: 100%)[
+        #image("txn-screenshot.png", width: 100%)
+      ]
+      #v(7pt)
+      #text(size: 12.5pt, weight: "bold", fill: accent, "Video demo")
+      #v(5pt)
+      #link("https://youtu.be/qP68obgtoQM")[
+        #block(stroke: 1pt + border, radius: 5pt, clip: true, width: 100%)[
+          #layout(size => {
+            let h = size.width * 1596 / 2426
+            let btn-h = 44pt
+            block(width: 100%, height: h)[
+              #place(top + left, image("demo-frame.png", width: 100%))
+              #place(top + center, dy: h / 2 - btn-h / 2 - 40pt,
+                block(fill: rgb("#000000BB"), radius: 30pt,
+                      inset: (x: 14pt, y: 10pt))[
+                  #text(size: 24pt, "▶")
+                ]
+              )
+            ]
+          })
         ]
+      ]
+    ],
+    // ── Col 3: QR ─────────────────────────────────────────────────────────
+    [
+      #align(center + top)[
+        #text(size: 11pt, fill: muted, "Try live")
+        #v(5pt)
+        #block(stroke: 2pt + blue, radius: 6pt, clip: true)[
+          #image("qr-demo.png", width: 82pt)
+        ]
+        #v(6pt)
+        #text(size: 9pt, fill: muted, font: ("Courier New","Courier"),
+          "ton-nft-loan-app\n.vercel.app")
       ]
     ],
   )
